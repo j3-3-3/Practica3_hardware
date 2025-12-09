@@ -1,0 +1,513 @@
+   1              		.cpu arm7tdmi
+   2              		.fpu softvfp
+   3              		.eabi_attribute 20, 1
+   4              		.eabi_attribute 21, 1
+   5              		.eabi_attribute 23, 3
+   6              		.eabi_attribute 24, 1
+   7              		.eabi_attribute 25, 1
+   8              		.eabi_attribute 26, 1
+   9              		.eabi_attribute 30, 6
+  10              		.eabi_attribute 18, 4
+  11              		.file	"sudoku_adapter.c"
+  21              	.Ltext0:
+  22              		.file 1 "../sudoku_adapter.c"
+ 1245              		.align	2
+ 1246              	runtime_grid:
+ 1247 0000 00000000 		.space	162
+ 1247      00000000 
+ 1247      00000000 
+ 1247      00000000 
+ 1247      00000000 
+ 1248 00a2 0000     		.text
+ 1249              		.align	2
+ 1250              		.global	sa_load_initial_board
+ 1252              	sa_load_initial_board:
+ 1253              	.LFB3:
+   1:../sudoku_adapter.c **** #include "sudoku_adapter.h"
+   2:../sudoku_adapter.c **** #include "sudoku_core.h"
+   3:../sudoku_adapter.c **** 
+   4:../sudoku_adapter.c **** /* Buffer de ejecución único */
+   5:../sudoku_adapter.c **** static CELDA runtime_grid[NUM_FILAS][NUM_COLUMNAS];
+   6:../sudoku_adapter.c **** 
+   7:../sudoku_adapter.c **** void sa_load_initial_board(void)
+   8:../sudoku_adapter.c **** {
+ 1254              		.loc 1 8 0
+ 1255              		.cfi_startproc
+ 1256              		@ Function supports interworking.
+ 1257              		@ args = 0, pretend = 0, frame = 0
+ 1258              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1259 0000 0DC0A0E1 		mov	ip, sp
+ 1260              	.LCFI0:
+ 1261              		.cfi_def_cfa_register 12
+ 1262 0004 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1263 0008 04B04CE2 		sub	fp, ip, #4
+ 1264              		.cfi_offset 14, -8
+ 1265              		.cfi_offset 13, -12
+ 1266              		.cfi_offset 11, -16
+ 1267              	.LCFI1:
+ 1268              		.cfi_def_cfa 11, 4
+   9:../sudoku_adapter.c ****     sudoku_cargar_tablero(runtime_grid);
+ 1269              		.loc 1 9 0
+ 1270 000c 14009FE5 		ldr	r0, .L2
+ 1271 0010 FEFFFFEB 		bl	sudoku_cargar_tablero
+  10:../sudoku_adapter.c ****     (void)candidatos_actualizar_c(runtime_grid);
+ 1272              		.loc 1 10 0
+ 1273 0014 0C009FE5 		ldr	r0, .L2
+ 1274 0018 FEFFFFEB 		bl	candidatos_actualizar_c
+  11:../sudoku_adapter.c **** }
+ 1275              		.loc 1 11 0
+ 1276 001c 0CD04BE2 		sub	sp, fp, #12
+ 1277 0020 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1278 0024 1EFF2FE1 		bx	lr
+ 1279              	.L3:
+ 1280              		.align	2
+ 1281              	.L2:
+ 1282 0028 00000000 		.word	runtime_grid
+ 1283              		.cfi_endproc
+ 1284              	.LFE3:
+ 1286              		.align	2
+ 1287              		.global	sa_recalc_all_candidates
+ 1289              	sa_recalc_all_candidates:
+ 1290              	.LFB4:
+  12:../sudoku_adapter.c **** 
+  13:../sudoku_adapter.c **** void sa_recalc_all_candidates(void)
+  14:../sudoku_adapter.c **** {
+ 1291              		.loc 1 14 0
+ 1292              		.cfi_startproc
+ 1293              		@ Function supports interworking.
+ 1294              		@ args = 0, pretend = 0, frame = 0
+ 1295              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1296 002c 0DC0A0E1 		mov	ip, sp
+ 1297              	.LCFI2:
+ 1298              		.cfi_def_cfa_register 12
+ 1299 0030 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1300 0034 04B04CE2 		sub	fp, ip, #4
+ 1301              		.cfi_offset 14, -8
+ 1302              		.cfi_offset 13, -12
+ 1303              		.cfi_offset 11, -16
+ 1304              	.LCFI3:
+ 1305              		.cfi_def_cfa 11, 4
+  15:../sudoku_adapter.c ****     (void)candidatos_actualizar_c(runtime_grid);
+ 1306              		.loc 1 15 0
+ 1307 0038 0C009FE5 		ldr	r0, .L5
+ 1308 003c FEFFFFEB 		bl	candidatos_actualizar_c
+  16:../sudoku_adapter.c **** }
+ 1309              		.loc 1 16 0
+ 1310 0040 0CD04BE2 		sub	sp, fp, #12
+ 1311 0044 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1312 0048 1EFF2FE1 		bx	lr
+ 1313              	.L6:
+ 1314              		.align	2
+ 1315              	.L5:
+ 1316 004c 00000000 		.word	runtime_grid
+ 1317              		.cfi_endproc
+ 1318              	.LFE4:
+ 1320              		.align	2
+ 1321              		.global	sa_propagate_value
+ 1323              	sa_propagate_value:
+ 1324              	.LFB5:
+  17:../sudoku_adapter.c **** 
+  18:../sudoku_adapter.c **** void sa_propagate_value(int row1_9, int col1_9, int val0_9)
+  19:../sudoku_adapter.c **** {
+ 1325              		.loc 1 19 0
+ 1326              		.cfi_startproc
+ 1327              		@ Function supports interworking.
+ 1328              		@ args = 0, pretend = 0, frame = 16
+ 1329              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1330 0050 0DC0A0E1 		mov	ip, sp
+ 1331              	.LCFI4:
+ 1332              		.cfi_def_cfa_register 12
+ 1333 0054 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1334 0058 04B04CE2 		sub	fp, ip, #4
+ 1335              		.cfi_offset 14, -8
+ 1336              		.cfi_offset 13, -12
+ 1337              		.cfi_offset 11, -16
+ 1338              	.LCFI5:
+ 1339              		.cfi_def_cfa 11, 4
+ 1340 005c 10D04DE2 		sub	sp, sp, #16
+ 1341 0060 10000BE5 		str	r0, [fp, #-16]
+ 1342 0064 14100BE5 		str	r1, [fp, #-20]
+ 1343 0068 18200BE5 		str	r2, [fp, #-24]
+  20:../sudoku_adapter.c ****     sudoku_escribir_valor(runtime_grid, (uint8_t)(row1_9-1), (uint8_t)(col1_9-1), (uint8_t)val0_9);
+ 1344              		.loc 1 20 0
+ 1345 006c 10301BE5 		ldr	r3, [fp, #-16]
+ 1346 0070 FF3003E2 		and	r3, r3, #255
+ 1347 0074 013043E2 		sub	r3, r3, #1
+ 1348 0078 FF1003E2 		and	r1, r3, #255
+ 1349 007c 14301BE5 		ldr	r3, [fp, #-20]
+ 1350 0080 FF3003E2 		and	r3, r3, #255
+ 1351 0084 013043E2 		sub	r3, r3, #1
+ 1352 0088 FF2003E2 		and	r2, r3, #255
+ 1353 008c 18301BE5 		ldr	r3, [fp, #-24]
+ 1354 0090 FF3003E2 		and	r3, r3, #255
+ 1355 0094 3C009FE5 		ldr	r0, .L8
+ 1356 0098 FEFFFFEB 		bl	sudoku_escribir_valor
+  21:../sudoku_adapter.c ****     candidatos_propagar_c(runtime_grid, (uint8_t)(row1_9-1), (uint8_t)(col1_9-1));
+ 1357              		.loc 1 21 0
+ 1358 009c 10301BE5 		ldr	r3, [fp, #-16]
+ 1359 00a0 FF3003E2 		and	r3, r3, #255
+ 1360 00a4 013043E2 		sub	r3, r3, #1
+ 1361 00a8 FF2003E2 		and	r2, r3, #255
+ 1362 00ac 14301BE5 		ldr	r3, [fp, #-20]
+ 1363 00b0 FF3003E2 		and	r3, r3, #255
+ 1364 00b4 013043E2 		sub	r3, r3, #1
+ 1365 00b8 FF3003E2 		and	r3, r3, #255
+ 1366 00bc 14009FE5 		ldr	r0, .L8
+ 1367 00c0 0210A0E1 		mov	r1, r2
+ 1368 00c4 0320A0E1 		mov	r2, r3
+ 1369 00c8 FEFFFFEB 		bl	candidatos_propagar_c
+  22:../sudoku_adapter.c **** }
+ 1370              		.loc 1 22 0
+ 1371 00cc 0CD04BE2 		sub	sp, fp, #12
+ 1372 00d0 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1373 00d4 1EFF2FE1 		bx	lr
+ 1374              	.L9:
+ 1375              		.align	2
+ 1376              	.L8:
+ 1377 00d8 00000000 		.word	runtime_grid
+ 1378              		.cfi_endproc
+ 1379              	.LFE5:
+ 1381              		.align	2
+ 1382              		.global	sa_is_pista
+ 1384              	sa_is_pista:
+ 1385              	.LFB6:
+  23:../sudoku_adapter.c **** 
+  24:../sudoku_adapter.c **** int sa_is_pista(int row1_9, int col1_9)
+  25:../sudoku_adapter.c **** {
+ 1386              		.loc 1 25 0
+ 1387              		.cfi_startproc
+ 1388              		@ Function supports interworking.
+ 1389              		@ args = 0, pretend = 0, frame = 8
+ 1390              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1391 00dc 0DC0A0E1 		mov	ip, sp
+ 1392              	.LCFI6:
+ 1393              		.cfi_def_cfa_register 12
+ 1394 00e0 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1395 00e4 04B04CE2 		sub	fp, ip, #4
+ 1396              		.cfi_offset 14, -8
+ 1397              		.cfi_offset 13, -12
+ 1398              		.cfi_offset 11, -16
+ 1399              	.LCFI7:
+ 1400              		.cfi_def_cfa 11, 4
+ 1401 00e8 08D04DE2 		sub	sp, sp, #8
+ 1402 00ec 10000BE5 		str	r0, [fp, #-16]
+ 1403 00f0 14100BE5 		str	r1, [fp, #-20]
+  26:../sudoku_adapter.c ****     return sudoku_es_pista(runtime_grid, (uint8_t)(row1_9-1), (uint8_t)(col1_9-1));
+ 1404              		.loc 1 26 0
+ 1405 00f4 10301BE5 		ldr	r3, [fp, #-16]
+ 1406 00f8 FF3003E2 		and	r3, r3, #255
+ 1407 00fc 013043E2 		sub	r3, r3, #1
+ 1408 0100 FF2003E2 		and	r2, r3, #255
+ 1409 0104 14301BE5 		ldr	r3, [fp, #-20]
+ 1410 0108 FF3003E2 		and	r3, r3, #255
+ 1411 010c 013043E2 		sub	r3, r3, #1
+ 1412 0110 FF3003E2 		and	r3, r3, #255
+ 1413 0114 1C009FE5 		ldr	r0, .L11
+ 1414 0118 0210A0E1 		mov	r1, r2
+ 1415 011c 0320A0E1 		mov	r2, r3
+ 1416 0120 FEFFFFEB 		bl	sudoku_es_pista
+ 1417 0124 0030A0E1 		mov	r3, r0
+  27:../sudoku_adapter.c **** }
+ 1418              		.loc 1 27 0
+ 1419 0128 0300A0E1 		mov	r0, r3
+ 1420 012c 0CD04BE2 		sub	sp, fp, #12
+ 1421 0130 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1422 0134 1EFF2FE1 		bx	lr
+ 1423              	.L12:
+ 1424              		.align	2
+ 1425              	.L11:
+ 1426 0138 00000000 		.word	runtime_grid
+ 1427              		.cfi_endproc
+ 1428              	.LFE6:
+ 1430              		.align	2
+ 1431              		.global	sa_get_value
+ 1433              	sa_get_value:
+ 1434              	.LFB7:
+  28:../sudoku_adapter.c **** 
+  29:../sudoku_adapter.c **** int sa_get_value(int row1_9, int col1_9)
+  30:../sudoku_adapter.c **** {
+ 1435              		.loc 1 30 0
+ 1436              		.cfi_startproc
+ 1437              		@ Function supports interworking.
+ 1438              		@ args = 0, pretend = 0, frame = 8
+ 1439              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1440 013c 0DC0A0E1 		mov	ip, sp
+ 1441              	.LCFI8:
+ 1442              		.cfi_def_cfa_register 12
+ 1443 0140 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1444 0144 04B04CE2 		sub	fp, ip, #4
+ 1445              		.cfi_offset 14, -8
+ 1446              		.cfi_offset 13, -12
+ 1447              		.cfi_offset 11, -16
+ 1448              	.LCFI9:
+ 1449              		.cfi_def_cfa 11, 4
+ 1450 0148 08D04DE2 		sub	sp, sp, #8
+ 1451 014c 10000BE5 		str	r0, [fp, #-16]
+ 1452 0150 14100BE5 		str	r1, [fp, #-20]
+  31:../sudoku_adapter.c ****     return (int)sudoku_leer_valor(runtime_grid, (uint8_t)(row1_9-1), (uint8_t)(col1_9-1));
+ 1453              		.loc 1 31 0
+ 1454 0154 10301BE5 		ldr	r3, [fp, #-16]
+ 1455 0158 FF3003E2 		and	r3, r3, #255
+ 1456 015c 013043E2 		sub	r3, r3, #1
+ 1457 0160 FF2003E2 		and	r2, r3, #255
+ 1458 0164 14301BE5 		ldr	r3, [fp, #-20]
+ 1459 0168 FF3003E2 		and	r3, r3, #255
+ 1460 016c 013043E2 		sub	r3, r3, #1
+ 1461 0170 FF3003E2 		and	r3, r3, #255
+ 1462 0174 1C009FE5 		ldr	r0, .L14
+ 1463 0178 0210A0E1 		mov	r1, r2
+ 1464 017c 0320A0E1 		mov	r2, r3
+ 1465 0180 FEFFFFEB 		bl	sudoku_leer_valor
+ 1466 0184 0030A0E1 		mov	r3, r0
+  32:../sudoku_adapter.c **** }
+ 1467              		.loc 1 32 0
+ 1468 0188 0300A0E1 		mov	r0, r3
+ 1469 018c 0CD04BE2 		sub	sp, fp, #12
+ 1470 0190 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1471 0194 1EFF2FE1 		bx	lr
+ 1472              	.L15:
+ 1473              		.align	2
+ 1474              	.L14:
+ 1475 0198 00000000 		.word	runtime_grid
+ 1476              		.cfi_endproc
+ 1477              	.LFE7:
+ 1479              		.align	2
+ 1480              		.global	sa_set_value
+ 1482              	sa_set_value:
+ 1483              	.LFB8:
+  33:../sudoku_adapter.c **** 
+  34:../sudoku_adapter.c **** void sa_set_value(int row1_9, int col1_9, int val0_9)
+  35:../sudoku_adapter.c **** {
+ 1484              		.loc 1 35 0
+ 1485              		.cfi_startproc
+ 1486              		@ Function supports interworking.
+ 1487              		@ args = 0, pretend = 0, frame = 16
+ 1488              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1489 019c 0DC0A0E1 		mov	ip, sp
+ 1490              	.LCFI10:
+ 1491              		.cfi_def_cfa_register 12
+ 1492 01a0 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1493 01a4 04B04CE2 		sub	fp, ip, #4
+ 1494              		.cfi_offset 14, -8
+ 1495              		.cfi_offset 13, -12
+ 1496              		.cfi_offset 11, -16
+ 1497              	.LCFI11:
+ 1498              		.cfi_def_cfa 11, 4
+ 1499 01a8 10D04DE2 		sub	sp, sp, #16
+ 1500 01ac 10000BE5 		str	r0, [fp, #-16]
+ 1501 01b0 14100BE5 		str	r1, [fp, #-20]
+ 1502 01b4 18200BE5 		str	r2, [fp, #-24]
+  36:../sudoku_adapter.c ****     sudoku_escribir_valor(runtime_grid, (uint8_t)(row1_9-1), (uint8_t)(col1_9-1), (uint8_t)val0_9);
+ 1503              		.loc 1 36 0
+ 1504 01b8 10301BE5 		ldr	r3, [fp, #-16]
+ 1505 01bc FF3003E2 		and	r3, r3, #255
+ 1506 01c0 013043E2 		sub	r3, r3, #1
+ 1507 01c4 FF1003E2 		and	r1, r3, #255
+ 1508 01c8 14301BE5 		ldr	r3, [fp, #-20]
+ 1509 01cc FF3003E2 		and	r3, r3, #255
+ 1510 01d0 013043E2 		sub	r3, r3, #1
+ 1511 01d4 FF2003E2 		and	r2, r3, #255
+ 1512 01d8 18301BE5 		ldr	r3, [fp, #-24]
+ 1513 01dc FF3003E2 		and	r3, r3, #255
+ 1514 01e0 0C009FE5 		ldr	r0, .L17
+ 1515 01e4 FEFFFFEB 		bl	sudoku_escribir_valor
+  37:../sudoku_adapter.c **** }
+ 1516              		.loc 1 37 0
+ 1517 01e8 0CD04BE2 		sub	sp, fp, #12
+ 1518 01ec 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1519 01f0 1EFF2FE1 		bx	lr
+ 1520              	.L18:
+ 1521              		.align	2
+ 1522              	.L17:
+ 1523 01f4 00000000 		.word	runtime_grid
+ 1524              		.cfi_endproc
+ 1525              	.LFE8:
+ 1527              		.align	2
+ 1528              		.global	sa_is_in_candidates
+ 1530              	sa_is_in_candidates:
+ 1531              	.LFB9:
+  38:../sudoku_adapter.c **** 
+  39:../sudoku_adapter.c **** int sa_is_in_candidates(int row1_9, int col1_9, int val1_9)
+  40:../sudoku_adapter.c **** {
+ 1532              		.loc 1 40 0
+ 1533              		.cfi_startproc
+ 1534              		@ Function supports interworking.
+ 1535              		@ args = 0, pretend = 0, frame = 16
+ 1536              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1537 01f8 0DC0A0E1 		mov	ip, sp
+ 1538              	.LCFI12:
+ 1539              		.cfi_def_cfa_register 12
+ 1540 01fc 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1541 0200 04B04CE2 		sub	fp, ip, #4
+ 1542              		.cfi_offset 14, -8
+ 1543              		.cfi_offset 13, -12
+ 1544              		.cfi_offset 11, -16
+ 1545              	.LCFI13:
+ 1546              		.cfi_def_cfa 11, 4
+ 1547 0204 10D04DE2 		sub	sp, sp, #16
+ 1548 0208 10000BE5 		str	r0, [fp, #-16]
+ 1549 020c 14100BE5 		str	r1, [fp, #-20]
+ 1550 0210 18200BE5 		str	r2, [fp, #-24]
+  41:../sudoku_adapter.c ****     return sudoku_val_es_candidato(runtime_grid,
+ 1551              		.loc 1 41 0
+ 1552 0214 10301BE5 		ldr	r3, [fp, #-16]
+ 1553 0218 FF3003E2 		and	r3, r3, #255
+ 1554 021c 013043E2 		sub	r3, r3, #1
+ 1555 0220 FF1003E2 		and	r1, r3, #255
+ 1556 0224 14301BE5 		ldr	r3, [fp, #-20]
+ 1557 0228 FF3003E2 		and	r3, r3, #255
+ 1558 022c 013043E2 		sub	r3, r3, #1
+ 1559 0230 FF2003E2 		and	r2, r3, #255
+ 1560 0234 18301BE5 		ldr	r3, [fp, #-24]
+ 1561 0238 FF3003E2 		and	r3, r3, #255
+ 1562 023c 14009FE5 		ldr	r0, .L20
+ 1563 0240 FEFFFFEB 		bl	sudoku_val_es_candidato
+ 1564 0244 0030A0E1 		mov	r3, r0
+  42:../sudoku_adapter.c ****                                    (uint8_t)(row1_9-1),
+  43:../sudoku_adapter.c ****                                    (uint8_t)(col1_9-1),
+  44:../sudoku_adapter.c ****                                    (uint8_t)val1_9);
+  45:../sudoku_adapter.c **** }
+ 1565              		.loc 1 45 0
+ 1566 0248 0300A0E1 		mov	r0, r3
+ 1567 024c 0CD04BE2 		sub	sp, fp, #12
+ 1568 0250 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1569 0254 1EFF2FE1 		bx	lr
+ 1570              	.L21:
+ 1571              		.align	2
+ 1572              	.L20:
+ 1573 0258 00000000 		.word	runtime_grid
+ 1574              		.cfi_endproc
+ 1575              	.LFE9:
+ 1577              		.align	2
+ 1578              		.global	sa_mark_cell_error
+ 1580              	sa_mark_cell_error:
+ 1581              	.LFB10:
+  46:../sudoku_adapter.c **** 
+  47:../sudoku_adapter.c **** void sa_mark_cell_error(int row1_9, int col1_9)
+  48:../sudoku_adapter.c **** {
+ 1582              		.loc 1 48 0
+ 1583              		.cfi_startproc
+ 1584              		@ Function supports interworking.
+ 1585              		@ args = 0, pretend = 0, frame = 8
+ 1586              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1587 025c 0DC0A0E1 		mov	ip, sp
+ 1588              	.LCFI14:
+ 1589              		.cfi_def_cfa_register 12
+ 1590 0260 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1591 0264 04B04CE2 		sub	fp, ip, #4
+ 1592              		.cfi_offset 14, -8
+ 1593              		.cfi_offset 13, -12
+ 1594              		.cfi_offset 11, -16
+ 1595              	.LCFI15:
+ 1596              		.cfi_def_cfa 11, 4
+ 1597 0268 08D04DE2 		sub	sp, sp, #8
+ 1598 026c 10000BE5 		str	r0, [fp, #-16]
+ 1599 0270 14100BE5 		str	r1, [fp, #-20]
+  49:../sudoku_adapter.c ****     sudoku_marcar_error(runtime_grid, (uint8_t)(row1_9-1), (uint8_t)(col1_9-1));
+ 1600              		.loc 1 49 0
+ 1601 0274 10301BE5 		ldr	r3, [fp, #-16]
+ 1602 0278 FF3003E2 		and	r3, r3, #255
+ 1603 027c 013043E2 		sub	r3, r3, #1
+ 1604 0280 FF2003E2 		and	r2, r3, #255
+ 1605 0284 14301BE5 		ldr	r3, [fp, #-20]
+ 1606 0288 FF3003E2 		and	r3, r3, #255
+ 1607 028c 013043E2 		sub	r3, r3, #1
+ 1608 0290 FF3003E2 		and	r3, r3, #255
+ 1609 0294 14009FE5 		ldr	r0, .L23
+ 1610 0298 0210A0E1 		mov	r1, r2
+ 1611 029c 0320A0E1 		mov	r2, r3
+ 1612 02a0 FEFFFFEB 		bl	sudoku_marcar_error
+  50:../sudoku_adapter.c **** }
+ 1613              		.loc 1 50 0
+ 1614 02a4 0CD04BE2 		sub	sp, fp, #12
+ 1615 02a8 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1616 02ac 1EFF2FE1 		bx	lr
+ 1617              	.L24:
+ 1618              		.align	2
+ 1619              	.L23:
+ 1620 02b0 00000000 		.word	runtime_grid
+ 1621              		.cfi_endproc
+ 1622              	.LFE10:
+ 1624              		.align	2
+ 1625              		.global	sa_invariant_ok
+ 1627              	sa_invariant_ok:
+ 1628              	.LFB11:
+  51:../sudoku_adapter.c **** 
+  52:../sudoku_adapter.c **** int sa_invariant_ok(void)
+  53:../sudoku_adapter.c **** {
+ 1629              		.loc 1 53 0
+ 1630              		.cfi_startproc
+ 1631              		@ Function supports interworking.
+ 1632              		@ args = 0, pretend = 0, frame = 0
+ 1633              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1634 02b4 0DC0A0E1 		mov	ip, sp
+ 1635              	.LCFI16:
+ 1636              		.cfi_def_cfa_register 12
+ 1637 02b8 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1638 02bc 04B04CE2 		sub	fp, ip, #4
+ 1639              		.cfi_offset 14, -8
+ 1640              		.cfi_offset 13, -12
+ 1641              		.cfi_offset 11, -16
+ 1642              	.LCFI17:
+ 1643              		.cfi_def_cfa 11, 4
+  54:../sudoku_adapter.c ****     return sudoku_invariant_ok(runtime_grid);
+ 1644              		.loc 1 54 0
+ 1645 02c0 14009FE5 		ldr	r0, .L26
+ 1646 02c4 FEFFFFEB 		bl	sudoku_invariant_ok
+ 1647 02c8 0030A0E1 		mov	r3, r0
+  55:../sudoku_adapter.c **** }
+ 1648              		.loc 1 55 0
+ 1649 02cc 0300A0E1 		mov	r0, r3
+ 1650 02d0 0CD04BE2 		sub	sp, fp, #12
+ 1651 02d4 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1652 02d8 1EFF2FE1 		bx	lr
+ 1653              	.L27:
+ 1654              		.align	2
+ 1655              	.L26:
+ 1656 02dc 00000000 		.word	runtime_grid
+ 1657              		.cfi_endproc
+ 1658              	.LFE11:
+ 1660              	.Letext0:
+DEFINED SYMBOLS
+                            *ABS*:00000000 sudoku_adapter.c
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1245   .bss:00000000 $d
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1246   .bss:00000000 runtime_grid
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1249   .text:00000000 $a
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1252   .text:00000000 sa_load_initial_board
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1282   .text:00000028 $d
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1286   .text:0000002c $a
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1289   .text:0000002c sa_recalc_all_candidates
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1316   .text:0000004c $d
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1320   .text:00000050 $a
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1323   .text:00000050 sa_propagate_value
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1377   .text:000000d8 $d
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1381   .text:000000dc $a
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1384   .text:000000dc sa_is_pista
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1426   .text:00000138 $d
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1430   .text:0000013c $a
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1433   .text:0000013c sa_get_value
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1475   .text:00000198 $d
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1479   .text:0000019c $a
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1482   .text:0000019c sa_set_value
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1523   .text:000001f4 $d
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1527   .text:000001f8 $a
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1530   .text:000001f8 sa_is_in_candidates
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1573   .text:00000258 $d
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1577   .text:0000025c $a
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1580   .text:0000025c sa_mark_cell_error
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1620   .text:000002b0 $d
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1624   .text:000002b4 $a
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1627   .text:000002b4 sa_invariant_ok
+C:\Users\jorge\AppData\Local\Temp\ccct9F5Q.s:1656   .text:000002dc $d
+                     .debug_frame:00000010 $d
+
+UNDEFINED SYMBOLS
+sudoku_cargar_tablero
+candidatos_actualizar_c
+sudoku_escribir_valor
+candidatos_propagar_c
+sudoku_es_pista
+sudoku_leer_valor
+sudoku_val_es_candidato
+sudoku_marcar_error
+sudoku_invariant_ok

@@ -1,0 +1,817 @@
+   1              		.cpu arm7tdmi
+   2              		.fpu softvfp
+   3              		.eabi_attribute 20, 1
+   4              		.eabi_attribute 21, 1
+   5              		.eabi_attribute 23, 3
+   6              		.eabi_attribute 24, 1
+   7              		.eabi_attribute 25, 1
+   8              		.eabi_attribute 26, 1
+   9              		.eabi_attribute 30, 6
+  10              		.eabi_attribute 18, 4
+  11              		.file	"sudoku_fsm.c"
+  21              	.Ltext0:
+  22              		.file 1 "../sudoku_fsm.c"
+ 1333              	st:
+ 1334 0000 00       		.space	1
+ 1335 0001 000000   		.align	2
+ 1336              	sel_row:
+ 1337 0004 00000000 		.space	4
+ 1338              		.align	2
+ 1339              	sel_col:
+ 1340 0008 00000000 		.space	4
+ 1341              		.align	2
+ 1342              	sel_val:
+ 1343 000c 00000000 		.space	4
+ 1344              		.align	2
+ 1345              	prev_val:
+ 1346 0010 00000000 		.space	4
+ 1347              		.text
+ 1348              		.align	2
+ 1350              	show_F:
+ 1351              	.LFB0:
+   1:../sudoku_fsm.c **** #include "sudoku_fsm.h"
+   2:../sudoku_fsm.c **** #include "sudoku_adapter.h"
+   3:../sudoku_fsm.c **** #include "8led.h"
+   4:../sudoku_fsm.c **** #include "button.h"
+   5:../sudoku_fsm.c **** #include "44blib.h"
+   6:../sudoku_fsm.c **** 
+   7:../sudoku_fsm.c **** typedef enum {
+   8:../sudoku_fsm.c ****     S_IDLE = 0,
+   9:../sudoku_fsm.c ****     S_SEL_ROW,
+  10:../sudoku_fsm.c ****     S_SEL_COL,
+  11:../sudoku_fsm.c ****     S_SEL_VAL,
+  12:../sudoku_fsm.c ****     S_APPLY,
+  13:../sudoku_fsm.c ****     S_ERROR
+  14:../sudoku_fsm.c **** } sudoku_state_t;
+  15:../sudoku_fsm.c **** 
+  16:../sudoku_fsm.c **** static sudoku_state_t st;
+  17:../sudoku_fsm.c **** static int sel_row, sel_col, sel_val;
+  18:../sudoku_fsm.c **** static int prev_val;
+  19:../sudoku_fsm.c **** 
+  20:../sudoku_fsm.c **** static void show_F(void) { D8Led_symbol(D8_IDX_F); }
+ 1352              		.loc 1 20 0
+ 1353              		.cfi_startproc
+ 1354              		@ Function supports interworking.
+ 1355              		@ args = 0, pretend = 0, frame = 0
+ 1356              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1357 0000 0DC0A0E1 		mov	ip, sp
+ 1358              	.LCFI0:
+ 1359              		.cfi_def_cfa_register 12
+ 1360 0004 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1361 0008 04B04CE2 		sub	fp, ip, #4
+ 1362              		.cfi_offset 14, -8
+ 1363              		.cfi_offset 13, -12
+ 1364              		.cfi_offset 11, -16
+ 1365              	.LCFI1:
+ 1366              		.cfi_def_cfa 11, 4
+ 1367              		.loc 1 20 0
+ 1368 000c 0F00A0E3 		mov	r0, #15
+ 1369 0010 FEFFFFEB 		bl	D8Led_symbol
+ 1370 0014 0CD04BE2 		sub	sp, fp, #12
+ 1371 0018 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1372 001c 1EFF2FE1 		bx	lr
+ 1373              		.cfi_endproc
+ 1374              	.LFE0:
+ 1376              		.align	2
+ 1378              	show_C:
+ 1379              	.LFB1:
+  21:../sudoku_fsm.c **** static void show_C(void) { D8Led_symbol(D8_IDX_C); }
+ 1380              		.loc 1 21 0
+ 1381              		.cfi_startproc
+ 1382              		@ Function supports interworking.
+ 1383              		@ args = 0, pretend = 0, frame = 0
+ 1384              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1385 0020 0DC0A0E1 		mov	ip, sp
+ 1386              	.LCFI2:
+ 1387              		.cfi_def_cfa_register 12
+ 1388 0024 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1389 0028 04B04CE2 		sub	fp, ip, #4
+ 1390              		.cfi_offset 14, -8
+ 1391              		.cfi_offset 13, -12
+ 1392              		.cfi_offset 11, -16
+ 1393              	.LCFI3:
+ 1394              		.cfi_def_cfa 11, 4
+ 1395              		.loc 1 21 0
+ 1396 002c 0C00A0E3 		mov	r0, #12
+ 1397 0030 FEFFFFEB 		bl	D8Led_symbol
+ 1398 0034 0CD04BE2 		sub	sp, fp, #12
+ 1399 0038 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1400 003c 1EFF2FE1 		bx	lr
+ 1401              		.cfi_endproc
+ 1402              	.LFE1:
+ 1404              		.align	2
+ 1406              	show_E:
+ 1407              	.LFB2:
+  22:../sudoku_fsm.c **** static void show_E(void) { D8Led_symbol(D8_IDX_E); }
+ 1408              		.loc 1 22 0
+ 1409              		.cfi_startproc
+ 1410              		@ Function supports interworking.
+ 1411              		@ args = 0, pretend = 0, frame = 0
+ 1412              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1413 0040 0DC0A0E1 		mov	ip, sp
+ 1414              	.LCFI4:
+ 1415              		.cfi_def_cfa_register 12
+ 1416 0044 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1417 0048 04B04CE2 		sub	fp, ip, #4
+ 1418              		.cfi_offset 14, -8
+ 1419              		.cfi_offset 13, -12
+ 1420              		.cfi_offset 11, -16
+ 1421              	.LCFI5:
+ 1422              		.cfi_def_cfa 11, 4
+ 1423              		.loc 1 22 0
+ 1424 004c 0E00A0E3 		mov	r0, #14
+ 1425 0050 FEFFFFEB 		bl	D8Led_symbol
+ 1426 0054 0CD04BE2 		sub	sp, fp, #12
+ 1427 0058 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1428 005c 1EFF2FE1 		bx	lr
+ 1429              		.cfi_endproc
+ 1430              	.LFE2:
+ 1432              		.align	2
+ 1434              	show_digit:
+ 1435              	.LFB3:
+  23:../sudoku_fsm.c **** static void show_digit(int d0_9) {
+ 1436              		.loc 1 23 0
+ 1437              		.cfi_startproc
+ 1438              		@ Function supports interworking.
+ 1439              		@ args = 0, pretend = 0, frame = 8
+ 1440              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1441 0060 0DC0A0E1 		mov	ip, sp
+ 1442              	.LCFI6:
+ 1443              		.cfi_def_cfa_register 12
+ 1444 0064 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1445 0068 04B04CE2 		sub	fp, ip, #4
+ 1446              		.cfi_offset 14, -8
+ 1447              		.cfi_offset 13, -12
+ 1448              		.cfi_offset 11, -16
+ 1449              	.LCFI7:
+ 1450              		.cfi_def_cfa 11, 4
+ 1451 006c 08D04DE2 		sub	sp, sp, #8
+ 1452 0070 10000BE5 		str	r0, [fp, #-16]
+  24:../sudoku_fsm.c ****     if (d0_9 < 0) d0_9 = 0;
+ 1453              		.loc 1 24 0
+ 1454 0074 10301BE5 		ldr	r3, [fp, #-16]
+ 1455 0078 000053E3 		cmp	r3, #0
+ 1456 007c 010000AA 		bge	.L5
+ 1457              		.loc 1 24 0 is_stmt 0 discriminator 1
+ 1458 0080 0030A0E3 		mov	r3, #0
+ 1459 0084 10300BE5 		str	r3, [fp, #-16]
+ 1460              	.L5:
+  25:../sudoku_fsm.c ****     if (d0_9 > 9) d0_9 = 9;
+ 1461              		.loc 1 25 0 is_stmt 1
+ 1462 0088 10301BE5 		ldr	r3, [fp, #-16]
+ 1463 008c 090053E3 		cmp	r3, #9
+ 1464 0090 010000DA 		ble	.L6
+ 1465              		.loc 1 25 0 is_stmt 0 discriminator 1
+ 1466 0094 0930A0E3 		mov	r3, #9
+ 1467 0098 10300BE5 		str	r3, [fp, #-16]
+ 1468              	.L6:
+  26:../sudoku_fsm.c ****     D8Led_symbol(d0_9); /* índices 0..9 coinciden con dígitos */
+ 1469              		.loc 1 26 0 is_stmt 1
+ 1470 009c 10001BE5 		ldr	r0, [fp, #-16]
+ 1471 00a0 FEFFFFEB 		bl	D8Led_symbol
+  27:../sudoku_fsm.c **** }
+ 1472              		.loc 1 27 0
+ 1473 00a4 0CD04BE2 		sub	sp, fp, #12
+ 1474 00a8 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1475 00ac 1EFF2FE1 		bx	lr
+ 1476              		.cfi_endproc
+ 1477              	.LFE3:
+ 1479              		.align	2
+ 1480              		.global	sudoku_init
+ 1482              	sudoku_init:
+ 1483              	.LFB4:
+  28:../sudoku_fsm.c **** 
+  29:../sudoku_fsm.c **** void sudoku_init(void)
+  30:../sudoku_fsm.c **** {
+ 1484              		.loc 1 30 0
+ 1485              		.cfi_startproc
+ 1486              		@ Function supports interworking.
+ 1487              		@ args = 0, pretend = 0, frame = 0
+ 1488              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1489 00b0 0DC0A0E1 		mov	ip, sp
+ 1490              	.LCFI8:
+ 1491              		.cfi_def_cfa_register 12
+ 1492 00b4 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1493 00b8 04B04CE2 		sub	fp, ip, #4
+ 1494              		.cfi_offset 14, -8
+ 1495              		.cfi_offset 13, -12
+ 1496              		.cfi_offset 11, -16
+ 1497              	.LCFI9:
+ 1498              		.cfi_def_cfa 11, 4
+  31:../sudoku_fsm.c ****     st = S_IDLE;
+ 1499              		.loc 1 31 0
+ 1500 00bc 4C309FE5 		ldr	r3, .L8
+ 1501 00c0 0020A0E3 		mov	r2, #0
+ 1502 00c4 0020C3E5 		strb	r2, [r3, #0]
+  32:../sudoku_fsm.c ****     sel_row = sel_col = 1;
+ 1503              		.loc 1 32 0
+ 1504 00c8 44309FE5 		ldr	r3, .L8+4
+ 1505 00cc 0120A0E3 		mov	r2, #1
+ 1506 00d0 002083E5 		str	r2, [r3, #0]
+ 1507 00d4 38309FE5 		ldr	r3, .L8+4
+ 1508 00d8 002093E5 		ldr	r2, [r3, #0]
+ 1509 00dc 34309FE5 		ldr	r3, .L8+8
+ 1510 00e0 002083E5 		str	r2, [r3, #0]
+  33:../sudoku_fsm.c ****     sel_val = 0;
+ 1511              		.loc 1 33 0
+ 1512 00e4 30309FE5 		ldr	r3, .L8+12
+ 1513 00e8 0020A0E3 		mov	r2, #0
+ 1514 00ec 002083E5 		str	r2, [r3, #0]
+  34:../sudoku_fsm.c ****     prev_val = 0;
+ 1515              		.loc 1 34 0
+ 1516 00f0 28309FE5 		ldr	r3, .L8+16
+ 1517 00f4 0020A0E3 		mov	r2, #0
+ 1518 00f8 002083E5 		str	r2, [r3, #0]
+  35:../sudoku_fsm.c ****     show_digit(0); /* muestra 0 inicial */
+ 1519              		.loc 1 35 0
+ 1520 00fc 0000A0E3 		mov	r0, #0
+ 1521 0100 D6FFFFEB 		bl	show_digit
+  36:../sudoku_fsm.c **** }
+ 1522              		.loc 1 36 0
+ 1523 0104 0CD04BE2 		sub	sp, fp, #12
+ 1524 0108 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1525 010c 1EFF2FE1 		bx	lr
+ 1526              	.L9:
+ 1527              		.align	2
+ 1528              	.L8:
+ 1529 0110 00000000 		.word	st
+ 1530 0114 08000000 		.word	sel_col
+ 1531 0118 04000000 		.word	sel_row
+ 1532 011c 0C000000 		.word	sel_val
+ 1533 0120 10000000 		.word	prev_val
+ 1534              		.cfi_endproc
+ 1535              	.LFE4:
+ 1537              		.align	2
+ 1538              		.global	sudoku_tick
+ 1540              	sudoku_tick:
+ 1541              	.LFB5:
+  37:../sudoku_fsm.c **** 
+  38:../sudoku_fsm.c **** void sudoku_tick(void)
+  39:../sudoku_fsm.c **** {
+ 1542              		.loc 1 39 0
+ 1543              		.cfi_startproc
+ 1544              		@ Function supports interworking.
+ 1545              		@ args = 0, pretend = 0, frame = 16
+ 1546              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1547 0124 0DC0A0E1 		mov	ip, sp
+ 1548              	.LCFI10:
+ 1549              		.cfi_def_cfa_register 12
+ 1550 0128 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1551 012c 04B04CE2 		sub	fp, ip, #4
+ 1552              		.cfi_offset 14, -8
+ 1553              		.cfi_offset 13, -12
+ 1554              		.cfi_offset 11, -16
+ 1555              	.LCFI11:
+ 1556              		.cfi_def_cfa 11, 4
+ 1557 0130 10D04DE2 		sub	sp, sp, #16
+  40:../sudoku_fsm.c ****     uint8_t click = button_take_click();
+ 1558              		.loc 1 40 0
+ 1559 0134 FEFFFFEB 		bl	button_take_click
+ 1560 0138 0030A0E1 		mov	r3, r0
+ 1561 013c 0D304BE5 		strb	r3, [fp, #-13]
+  41:../sudoku_fsm.c ****     uint8_t inc   = button_take_inc_event();
+ 1562              		.loc 1 41 0
+ 1563 0140 FEFFFFEB 		bl	button_take_inc_event
+ 1564 0144 0030A0E1 		mov	r3, r0
+ 1565 0148 0E304BE5 		strb	r3, [fp, #-14]
+  42:../sudoku_fsm.c **** 
+  43:../sudoku_fsm.c ****     switch (st)
+ 1566              		.loc 1 43 0
+ 1567 014c 1C349FE5 		ldr	r3, .L47
+ 1568 0150 0030D3E5 		ldrb	r3, [r3, #0]	@ zero_extendqisi2
+ 1569 0154 050053E3 		cmp	r3, #5
+ 1570 0158 03F19F97 		ldrls	pc, [pc, r3, asl #2]
+ 1571 015c F20000EA 		b	.L11
+ 1572              	.L18:
+ 1573 0160 78010000 		.word	.L12
+ 1574 0164 B4010000 		.word	.L13
+ 1575 0168 30020000 		.word	.L14
+ 1576 016c 4C030000 		.word	.L15
+ 1577 0170 B8030000 		.word	.L16
+ 1578 0174 00050000 		.word	.L17
+ 1579              	.L12:
+  44:../sudoku_fsm.c ****     {
+  45:../sudoku_fsm.c ****         case S_IDLE:
+  46:../sudoku_fsm.c ****             if (click || inc) {
+ 1580              		.loc 1 46 0
+ 1581 0178 0D305BE5 		ldrb	r3, [fp, #-13]	@ zero_extendqisi2
+ 1582 017c 000053E3 		cmp	r3, #0
+ 1583 0180 0200001A 		bne	.L19
+ 1584              		.loc 1 46 0 is_stmt 0 discriminator 1
+ 1585 0184 0E305BE5 		ldrb	r3, [fp, #-14]	@ zero_extendqisi2
+ 1586 0188 000053E3 		cmp	r3, #0
+ 1587 018c EB00000A 		beq	.L42
+ 1588              	.L19:
+  47:../sudoku_fsm.c ****                 sa_load_initial_board();
+ 1589              		.loc 1 47 0 is_stmt 1
+ 1590 0190 FEFFFFEB 		bl	sa_load_initial_board
+  48:../sudoku_fsm.c ****                 st = S_SEL_ROW;
+ 1591              		.loc 1 48 0
+ 1592 0194 D4339FE5 		ldr	r3, .L47
+ 1593 0198 0120A0E3 		mov	r2, #1
+ 1594 019c 0020C3E5 		strb	r2, [r3, #0]
+  49:../sudoku_fsm.c ****                 sel_row = 1;
+ 1595              		.loc 1 49 0
+ 1596 01a0 CC339FE5 		ldr	r3, .L47+4
+ 1597 01a4 0120A0E3 		mov	r2, #1
+ 1598 01a8 002083E5 		str	r2, [r3, #0]
+  50:../sudoku_fsm.c ****                 show_F();
+ 1599              		.loc 1 50 0
+ 1600 01ac 93FFFFEB 		bl	show_F
+  51:../sudoku_fsm.c ****             }
+  52:../sudoku_fsm.c ****             break;
+ 1601              		.loc 1 52 0
+ 1602 01b0 EB0000EA 		b	.L10
+ 1603              	.L13:
+  53:../sudoku_fsm.c **** 
+  54:../sudoku_fsm.c ****         case S_SEL_ROW:
+  55:../sudoku_fsm.c ****             if (inc) {
+ 1604              		.loc 1 55 0
+ 1605 01b4 0E305BE5 		ldrb	r3, [fp, #-14]	@ zero_extendqisi2
+ 1606 01b8 000053E3 		cmp	r3, #0
+ 1607 01bc 1000000A 		beq	.L22
+  56:../sudoku_fsm.c ****                 sel_row++;
+ 1608              		.loc 1 56 0
+ 1609 01c0 AC339FE5 		ldr	r3, .L47+4
+ 1610 01c4 003093E5 		ldr	r3, [r3, #0]
+ 1611 01c8 012083E2 		add	r2, r3, #1
+ 1612 01cc A0339FE5 		ldr	r3, .L47+4
+ 1613 01d0 002083E5 		str	r2, [r3, #0]
+  57:../sudoku_fsm.c ****                 if (sel_row > 9) sel_row = 1;
+ 1614              		.loc 1 57 0
+ 1615 01d4 98339FE5 		ldr	r3, .L47+4
+ 1616 01d8 003093E5 		ldr	r3, [r3, #0]
+ 1617 01dc 090053E3 		cmp	r3, #9
+ 1618 01e0 020000DA 		ble	.L23
+ 1619              		.loc 1 57 0 is_stmt 0 discriminator 1
+ 1620 01e4 88339FE5 		ldr	r3, .L47+4
+ 1621 01e8 0120A0E3 		mov	r2, #1
+ 1622 01ec 002083E5 		str	r2, [r3, #0]
+ 1623              	.L23:
+  58:../sudoku_fsm.c ****                 show_digit(sel_row);
+ 1624              		.loc 1 58 0 is_stmt 1
+ 1625 01f0 7C339FE5 		ldr	r3, .L47+4
+ 1626 01f4 003093E5 		ldr	r3, [r3, #0]
+ 1627 01f8 0300A0E1 		mov	r0, r3
+ 1628 01fc 97FFFFEB 		bl	show_digit
+  59:../sudoku_fsm.c ****             } else if (click == 1) {
+  60:../sudoku_fsm.c ****                 st = S_SEL_COL;
+  61:../sudoku_fsm.c ****                 sel_col = 1;
+  62:../sudoku_fsm.c ****                 show_C();
+  63:../sudoku_fsm.c ****             }
+  64:../sudoku_fsm.c ****             break;
+ 1629              		.loc 1 64 0
+ 1630 0200 D70000EA 		b	.L10
+ 1631              	.L22:
+  59:../sudoku_fsm.c ****             } else if (click == 1) {
+ 1632              		.loc 1 59 0
+ 1633 0204 0D305BE5 		ldrb	r3, [fp, #-13]	@ zero_extendqisi2
+ 1634 0208 010053E3 		cmp	r3, #1
+ 1635 020c CD00001A 		bne	.L43
+  60:../sudoku_fsm.c ****                 st = S_SEL_COL;
+ 1636              		.loc 1 60 0
+ 1637 0210 58339FE5 		ldr	r3, .L47
+ 1638 0214 0220A0E3 		mov	r2, #2
+ 1639 0218 0020C3E5 		strb	r2, [r3, #0]
+  61:../sudoku_fsm.c ****                 sel_col = 1;
+ 1640              		.loc 1 61 0
+ 1641 021c 54339FE5 		ldr	r3, .L47+8
+ 1642 0220 0120A0E3 		mov	r2, #1
+ 1643 0224 002083E5 		str	r2, [r3, #0]
+  62:../sudoku_fsm.c ****                 show_C();
+ 1644              		.loc 1 62 0
+ 1645 0228 7CFFFFEB 		bl	show_C
+ 1646              		.loc 1 64 0
+ 1647 022c CC0000EA 		b	.L10
+ 1648              	.L14:
+  65:../sudoku_fsm.c **** 
+  66:../sudoku_fsm.c ****         case S_SEL_COL:
+  67:../sudoku_fsm.c ****             if (inc) {
+ 1649              		.loc 1 67 0
+ 1650 0230 0E305BE5 		ldrb	r3, [fp, #-14]	@ zero_extendqisi2
+ 1651 0234 000053E3 		cmp	r3, #0
+ 1652 0238 1000000A 		beq	.L25
+  68:../sudoku_fsm.c ****                 sel_col++;
+ 1653              		.loc 1 68 0
+ 1654 023c 34339FE5 		ldr	r3, .L47+8
+ 1655 0240 003093E5 		ldr	r3, [r3, #0]
+ 1656 0244 012083E2 		add	r2, r3, #1
+ 1657 0248 28339FE5 		ldr	r3, .L47+8
+ 1658 024c 002083E5 		str	r2, [r3, #0]
+  69:../sudoku_fsm.c ****                 if (sel_col > 9) sel_col = 1;
+ 1659              		.loc 1 69 0
+ 1660 0250 20339FE5 		ldr	r3, .L47+8
+ 1661 0254 003093E5 		ldr	r3, [r3, #0]
+ 1662 0258 090053E3 		cmp	r3, #9
+ 1663 025c 020000DA 		ble	.L26
+ 1664              		.loc 1 69 0 is_stmt 0 discriminator 1
+ 1665 0260 10339FE5 		ldr	r3, .L47+8
+ 1666 0264 0120A0E3 		mov	r2, #1
+ 1667 0268 002083E5 		str	r2, [r3, #0]
+ 1668              	.L26:
+  70:../sudoku_fsm.c ****                 show_digit(sel_col);
+ 1669              		.loc 1 70 0 is_stmt 1
+ 1670 026c 04339FE5 		ldr	r3, .L47+8
+ 1671 0270 003093E5 		ldr	r3, [r3, #0]
+ 1672 0274 0300A0E1 		mov	r0, r3
+ 1673 0278 78FFFFEB 		bl	show_digit
+  71:../sudoku_fsm.c ****             } else if (click == 1) {
+  72:../sudoku_fsm.c ****                 if (sa_is_pista(sel_row, sel_col)) {
+  73:../sudoku_fsm.c ****                     st = S_SEL_ROW;
+  74:../sudoku_fsm.c ****                     show_F();
+  75:../sudoku_fsm.c ****                 } else {
+  76:../sudoku_fsm.c ****                     st = S_SEL_VAL;
+  77:../sudoku_fsm.c ****                     sel_val = sa_get_value(sel_row, sel_col);
+  78:../sudoku_fsm.c ****                     if (sel_val < 0 || sel_val > 9) sel_val = 0;
+  79:../sudoku_fsm.c ****                     prev_val = sel_val;
+  80:../sudoku_fsm.c ****                     show_digit(sel_val);
+  81:../sudoku_fsm.c ****                 }
+  82:../sudoku_fsm.c ****             }
+  83:../sudoku_fsm.c ****             break;
+ 1674              		.loc 1 83 0
+ 1675 027c B80000EA 		b	.L10
+ 1676              	.L25:
+  71:../sudoku_fsm.c ****             } else if (click == 1) {
+ 1677              		.loc 1 71 0
+ 1678 0280 0D305BE5 		ldrb	r3, [fp, #-13]	@ zero_extendqisi2
+ 1679 0284 010053E3 		cmp	r3, #1
+ 1680 0288 B000001A 		bne	.L44
+  72:../sudoku_fsm.c ****                 if (sa_is_pista(sel_row, sel_col)) {
+ 1681              		.loc 1 72 0
+ 1682 028c E0329FE5 		ldr	r3, .L47+4
+ 1683 0290 002093E5 		ldr	r2, [r3, #0]
+ 1684 0294 DC329FE5 		ldr	r3, .L47+8
+ 1685 0298 003093E5 		ldr	r3, [r3, #0]
+ 1686 029c 0200A0E1 		mov	r0, r2
+ 1687 02a0 0310A0E1 		mov	r1, r3
+ 1688 02a4 FEFFFFEB 		bl	sa_is_pista
+ 1689 02a8 0030A0E1 		mov	r3, r0
+ 1690 02ac 000053E3 		cmp	r3, #0
+ 1691 02b0 0400000A 		beq	.L28
+  73:../sudoku_fsm.c ****                     st = S_SEL_ROW;
+ 1692              		.loc 1 73 0
+ 1693 02b4 B4329FE5 		ldr	r3, .L47
+ 1694 02b8 0120A0E3 		mov	r2, #1
+ 1695 02bc 0020C3E5 		strb	r2, [r3, #0]
+  74:../sudoku_fsm.c ****                     show_F();
+ 1696              		.loc 1 74 0
+ 1697 02c0 4EFFFFEB 		bl	show_F
+ 1698              		.loc 1 83 0
+ 1699 02c4 A60000EA 		b	.L10
+ 1700              	.L28:
+  76:../sudoku_fsm.c ****                     st = S_SEL_VAL;
+ 1701              		.loc 1 76 0
+ 1702 02c8 A0329FE5 		ldr	r3, .L47
+ 1703 02cc 0320A0E3 		mov	r2, #3
+ 1704 02d0 0020C3E5 		strb	r2, [r3, #0]
+  77:../sudoku_fsm.c ****                     sel_val = sa_get_value(sel_row, sel_col);
+ 1705              		.loc 1 77 0
+ 1706 02d4 98329FE5 		ldr	r3, .L47+4
+ 1707 02d8 002093E5 		ldr	r2, [r3, #0]
+ 1708 02dc 94329FE5 		ldr	r3, .L47+8
+ 1709 02e0 003093E5 		ldr	r3, [r3, #0]
+ 1710 02e4 0200A0E1 		mov	r0, r2
+ 1711 02e8 0310A0E1 		mov	r1, r3
+ 1712 02ec FEFFFFEB 		bl	sa_get_value
+ 1713 02f0 0020A0E1 		mov	r2, r0
+ 1714 02f4 80329FE5 		ldr	r3, .L47+12
+ 1715 02f8 002083E5 		str	r2, [r3, #0]
+  78:../sudoku_fsm.c ****                     if (sel_val < 0 || sel_val > 9) sel_val = 0;
+ 1716              		.loc 1 78 0
+ 1717 02fc 78329FE5 		ldr	r3, .L47+12
+ 1718 0300 003093E5 		ldr	r3, [r3, #0]
+ 1719 0304 000053E3 		cmp	r3, #0
+ 1720 0308 030000BA 		blt	.L29
+  78:../sudoku_fsm.c ****                     if (sel_val < 0 || sel_val > 9) sel_val = 0;
+ 1721              		.loc 1 78 0 is_stmt 0 discriminator 2
+ 1722 030c 68329FE5 		ldr	r3, .L47+12
+ 1723 0310 003093E5 		ldr	r3, [r3, #0]
+ 1724 0314 090053E3 		cmp	r3, #9
+ 1725 0318 020000DA 		ble	.L30
+ 1726              	.L29:
+  78:../sudoku_fsm.c ****                     if (sel_val < 0 || sel_val > 9) sel_val = 0;
+ 1727              		.loc 1 78 0 discriminator 1
+ 1728 031c 58329FE5 		ldr	r3, .L47+12
+ 1729 0320 0020A0E3 		mov	r2, #0
+ 1730 0324 002083E5 		str	r2, [r3, #0]
+ 1731              	.L30:
+  79:../sudoku_fsm.c ****                     prev_val = sel_val;
+ 1732              		.loc 1 79 0 is_stmt 1
+ 1733 0328 4C329FE5 		ldr	r3, .L47+12
+ 1734 032c 002093E5 		ldr	r2, [r3, #0]
+ 1735 0330 48329FE5 		ldr	r3, .L47+16
+ 1736 0334 002083E5 		str	r2, [r3, #0]
+  80:../sudoku_fsm.c ****                     show_digit(sel_val);
+ 1737              		.loc 1 80 0
+ 1738 0338 3C329FE5 		ldr	r3, .L47+12
+ 1739 033c 003093E5 		ldr	r3, [r3, #0]
+ 1740 0340 0300A0E1 		mov	r0, r3
+ 1741 0344 45FFFFEB 		bl	show_digit
+ 1742              		.loc 1 83 0
+ 1743 0348 850000EA 		b	.L10
+ 1744              	.L15:
+  84:../sudoku_fsm.c **** 
+  85:../sudoku_fsm.c ****         case S_SEL_VAL:
+  86:../sudoku_fsm.c ****             if (inc) {
+ 1745              		.loc 1 86 0
+ 1746 034c 0E305BE5 		ldrb	r3, [fp, #-14]	@ zero_extendqisi2
+ 1747 0350 000053E3 		cmp	r3, #0
+ 1748 0354 1000000A 		beq	.L31
+  87:../sudoku_fsm.c ****                 sel_val++;
+ 1749              		.loc 1 87 0
+ 1750 0358 1C329FE5 		ldr	r3, .L47+12
+ 1751 035c 003093E5 		ldr	r3, [r3, #0]
+ 1752 0360 012083E2 		add	r2, r3, #1
+ 1753 0364 10329FE5 		ldr	r3, .L47+12
+ 1754 0368 002083E5 		str	r2, [r3, #0]
+  88:../sudoku_fsm.c ****                 if (sel_val > 9) sel_val = 0; /* incluye 0 borrar */
+ 1755              		.loc 1 88 0
+ 1756 036c 08329FE5 		ldr	r3, .L47+12
+ 1757 0370 003093E5 		ldr	r3, [r3, #0]
+ 1758 0374 090053E3 		cmp	r3, #9
+ 1759 0378 020000DA 		ble	.L32
+ 1760              		.loc 1 88 0 is_stmt 0 discriminator 1
+ 1761 037c F8319FE5 		ldr	r3, .L47+12
+ 1762 0380 0020A0E3 		mov	r2, #0
+ 1763 0384 002083E5 		str	r2, [r3, #0]
+ 1764              	.L32:
+  89:../sudoku_fsm.c ****                 show_digit(sel_val);
+ 1765              		.loc 1 89 0 is_stmt 1
+ 1766 0388 EC319FE5 		ldr	r3, .L47+12
+ 1767 038c 003093E5 		ldr	r3, [r3, #0]
+ 1768 0390 0300A0E1 		mov	r0, r3
+ 1769 0394 31FFFFEB 		bl	show_digit
+  90:../sudoku_fsm.c ****             } else if (click == 1) {
+  91:../sudoku_fsm.c ****                 st = S_APPLY;
+  92:../sudoku_fsm.c ****             }
+  93:../sudoku_fsm.c ****             break;
+ 1770              		.loc 1 93 0
+ 1771 0398 710000EA 		b	.L10
+ 1772              	.L31:
+  90:../sudoku_fsm.c ****             } else if (click == 1) {
+ 1773              		.loc 1 90 0
+ 1774 039c 0D305BE5 		ldrb	r3, [fp, #-13]	@ zero_extendqisi2
+ 1775 03a0 010053E3 		cmp	r3, #1
+ 1776 03a4 6B00001A 		bne	.L45
+  91:../sudoku_fsm.c ****                 st = S_APPLY;
+ 1777              		.loc 1 91 0
+ 1778 03a8 C0319FE5 		ldr	r3, .L47
+ 1779 03ac 0420A0E3 		mov	r2, #4
+ 1780 03b0 0020C3E5 		strb	r2, [r3, #0]
+ 1781              		.loc 1 93 0
+ 1782 03b4 6A0000EA 		b	.L10
+ 1783              	.L16:
+ 1784              	.LBB2:
+  94:../sudoku_fsm.c **** 
+  95:../sudoku_fsm.c ****         case S_APPLY: {
+  96:../sudoku_fsm.c ****             int new_val = sel_val;
+ 1785              		.loc 1 96 0
+ 1786 03b8 BC319FE5 		ldr	r3, .L47+12
+ 1787 03bc 003093E5 		ldr	r3, [r3, #0]
+ 1788 03c0 14300BE5 		str	r3, [fp, #-20]
+  97:../sudoku_fsm.c ****             int old_val = sa_get_value(sel_row, sel_col);
+ 1789              		.loc 1 97 0
+ 1790 03c4 A8319FE5 		ldr	r3, .L47+4
+ 1791 03c8 002093E5 		ldr	r2, [r3, #0]
+ 1792 03cc A4319FE5 		ldr	r3, .L47+8
+ 1793 03d0 003093E5 		ldr	r3, [r3, #0]
+ 1794 03d4 0200A0E1 		mov	r0, r2
+ 1795 03d8 0310A0E1 		mov	r1, r3
+ 1796 03dc FEFFFFEB 		bl	sa_get_value
+ 1797 03e0 18000BE5 		str	r0, [fp, #-24]
+  98:../sudoku_fsm.c **** 
+  99:../sudoku_fsm.c ****             if (new_val != 0 && !sa_is_in_candidates(sel_row, sel_col, new_val)) {
+ 1798              		.loc 1 99 0
+ 1799 03e4 14301BE5 		ldr	r3, [fp, #-20]
+ 1800 03e8 000053E3 		cmp	r3, #0
+ 1801 03ec 1900000A 		beq	.L34
+ 1802              		.loc 1 99 0 is_stmt 0 discriminator 1
+ 1803 03f0 7C319FE5 		ldr	r3, .L47+4
+ 1804 03f4 002093E5 		ldr	r2, [r3, #0]
+ 1805 03f8 78319FE5 		ldr	r3, .L47+8
+ 1806 03fc 003093E5 		ldr	r3, [r3, #0]
+ 1807 0400 0200A0E1 		mov	r0, r2
+ 1808 0404 0310A0E1 		mov	r1, r3
+ 1809 0408 14201BE5 		ldr	r2, [fp, #-20]
+ 1810 040c FEFFFFEB 		bl	sa_is_in_candidates
+ 1811 0410 0030A0E1 		mov	r3, r0
+ 1812 0414 000053E3 		cmp	r3, #0
+ 1813 0418 0E00001A 		bne	.L34
+ 100:../sudoku_fsm.c ****                 sa_mark_cell_error(sel_row, sel_col);
+ 1814              		.loc 1 100 0 is_stmt 1
+ 1815 041c 50319FE5 		ldr	r3, .L47+4
+ 1816 0420 002093E5 		ldr	r2, [r3, #0]
+ 1817 0424 4C319FE5 		ldr	r3, .L47+8
+ 1818 0428 003093E5 		ldr	r3, [r3, #0]
+ 1819 042c 0200A0E1 		mov	r0, r2
+ 1820 0430 0310A0E1 		mov	r1, r3
+ 1821 0434 FEFFFFEB 		bl	sa_mark_cell_error
+ 101:../sudoku_fsm.c ****                 show_E();
+ 1822              		.loc 1 101 0
+ 1823 0438 00FFFFEB 		bl	show_E
+ 102:../sudoku_fsm.c ****                 Delay(300);
+ 1824              		.loc 1 102 0
+ 1825 043c 4B0FA0E3 		mov	r0, #300
+ 1826 0440 FEFFFFEB 		bl	Delay
+ 103:../sudoku_fsm.c ****                 show_F();
+ 1827              		.loc 1 103 0
+ 1828 0444 EDFEFFEB 		bl	show_F
+ 104:../sudoku_fsm.c ****                 st = S_SEL_ROW;
+ 1829              		.loc 1 104 0
+ 1830 0448 20319FE5 		ldr	r3, .L47
+ 1831 044c 0120A0E3 		mov	r2, #1
+ 1832 0450 0020C3E5 		strb	r2, [r3, #0]
+ 105:../sudoku_fsm.c ****                 break;
+ 1833              		.loc 1 105 0
+ 1834 0454 420000EA 		b	.L10
+ 1835              	.L34:
+ 106:../sudoku_fsm.c ****             }
+ 107:../sudoku_fsm.c **** 
+ 108:../sudoku_fsm.c ****             sa_set_value(sel_row, sel_col, new_val);
+ 1836              		.loc 1 108 0
+ 1837 0458 14319FE5 		ldr	r3, .L47+4
+ 1838 045c 002093E5 		ldr	r2, [r3, #0]
+ 1839 0460 10319FE5 		ldr	r3, .L47+8
+ 1840 0464 003093E5 		ldr	r3, [r3, #0]
+ 1841 0468 0200A0E1 		mov	r0, r2
+ 1842 046c 0310A0E1 		mov	r1, r3
+ 1843 0470 14201BE5 		ldr	r2, [fp, #-20]
+ 1844 0474 FEFFFFEB 		bl	sa_set_value
+ 109:../sudoku_fsm.c **** 
+ 110:../sudoku_fsm.c ****             if ((old_val != 0 && new_val == 0) ||
+ 1845              		.loc 1 110 0
+ 1846 0478 18301BE5 		ldr	r3, [fp, #-24]
+ 1847 047c 000053E3 		cmp	r3, #0
+ 1848 0480 0200000A 		beq	.L35
+ 1849              		.loc 1 110 0 is_stmt 0 discriminator 1
+ 1850 0484 14301BE5 		ldr	r3, [fp, #-20]
+ 1851 0488 000053E3 		cmp	r3, #0
+ 1852 048c 0900000A 		beq	.L36
+ 1853              	.L35:
+ 1854              		.loc 1 110 0 discriminator 2
+ 1855 0490 18301BE5 		ldr	r3, [fp, #-24]
+ 1856 0494 000053E3 		cmp	r3, #0
+ 1857 0498 0300000A 		beq	.L37
+ 111:../sudoku_fsm.c ****                 (old_val != 0 && new_val != old_val) ||
+ 1858              		.loc 1 111 0 is_stmt 1
+ 1859 049c 14201BE5 		ldr	r2, [fp, #-20]
+ 1860 04a0 18301BE5 		ldr	r3, [fp, #-24]
+ 1861 04a4 030052E1 		cmp	r2, r3
+ 1862 04a8 0200001A 		bne	.L36
+ 1863              	.L37:
+ 1864              		.loc 1 111 0 is_stmt 0 discriminator 1
+ 1865 04ac 14301BE5 		ldr	r3, [fp, #-20]
+ 1866 04b0 000053E3 		cmp	r3, #0
+ 1867 04b4 0100001A 		bne	.L38
+ 1868              	.L36:
+ 112:../sudoku_fsm.c ****                 (new_val == 0)) {
+ 113:../sudoku_fsm.c ****                 sa_recalc_all_candidates();
+ 1869              		.loc 1 113 0 is_stmt 1
+ 1870 04b8 FEFFFFEB 		bl	sa_recalc_all_candidates
+ 1871 04bc 0A0000EA 		b	.L39
+ 1872              	.L38:
+ 114:../sudoku_fsm.c ****             } else if (new_val != 0) {
+ 1873              		.loc 1 114 0
+ 1874 04c0 14301BE5 		ldr	r3, [fp, #-20]
+ 1875 04c4 000053E3 		cmp	r3, #0
+ 1876 04c8 0700000A 		beq	.L39
+ 115:../sudoku_fsm.c ****                 sa_propagate_value(sel_row, sel_col, new_val);
+ 1877              		.loc 1 115 0
+ 1878 04cc A0309FE5 		ldr	r3, .L47+4
+ 1879 04d0 002093E5 		ldr	r2, [r3, #0]
+ 1880 04d4 9C309FE5 		ldr	r3, .L47+8
+ 1881 04d8 003093E5 		ldr	r3, [r3, #0]
+ 1882 04dc 0200A0E1 		mov	r0, r2
+ 1883 04e0 0310A0E1 		mov	r1, r3
+ 1884 04e4 14201BE5 		ldr	r2, [fp, #-20]
+ 1885 04e8 FEFFFFEB 		bl	sa_propagate_value
+ 1886              	.L39:
+ 116:../sudoku_fsm.c ****             }
+ 117:../sudoku_fsm.c **** 
+ 118:../sudoku_fsm.c ****             show_F();
+ 1887              		.loc 1 118 0
+ 1888 04ec C3FEFFEB 		bl	show_F
+ 119:../sudoku_fsm.c ****             st = S_SEL_ROW;
+ 1889              		.loc 1 119 0
+ 1890 04f0 78309FE5 		ldr	r3, .L47
+ 1891 04f4 0120A0E3 		mov	r2, #1
+ 1892 04f8 0020C3E5 		strb	r2, [r3, #0]
+ 120:../sudoku_fsm.c ****             break;
+ 1893              		.loc 1 120 0
+ 1894 04fc 180000EA 		b	.L10
+ 1895              	.L17:
+ 1896              	.LBE2:
+ 121:../sudoku_fsm.c ****         }
+ 122:../sudoku_fsm.c **** 
+ 123:../sudoku_fsm.c ****         case S_ERROR:
+ 124:../sudoku_fsm.c ****             if (click || inc) {
+ 1897              		.loc 1 124 0
+ 1898 0500 0D305BE5 		ldrb	r3, [fp, #-13]	@ zero_extendqisi2
+ 1899 0504 000053E3 		cmp	r3, #0
+ 1900 0508 0200001A 		bne	.L40
+ 1901              		.loc 1 124 0 is_stmt 0 discriminator 1
+ 1902 050c 0E305BE5 		ldrb	r3, [fp, #-14]	@ zero_extendqisi2
+ 1903 0510 000053E3 		cmp	r3, #0
+ 1904 0514 1100000A 		beq	.L46
+ 1905              	.L40:
+ 125:../sudoku_fsm.c ****                 show_F();
+ 1906              		.loc 1 125 0 is_stmt 1
+ 1907 0518 B8FEFFEB 		bl	show_F
+ 126:../sudoku_fsm.c ****                 st = S_SEL_ROW;
+ 1908              		.loc 1 126 0
+ 1909 051c 4C309FE5 		ldr	r3, .L47
+ 1910 0520 0120A0E3 		mov	r2, #1
+ 1911 0524 0020C3E5 		strb	r2, [r3, #0]
+ 127:../sudoku_fsm.c ****             }
+ 128:../sudoku_fsm.c ****             break;
+ 1912              		.loc 1 128 0
+ 1913 0528 0D0000EA 		b	.L10
+ 1914              	.L11:
+ 129:../sudoku_fsm.c **** 
+ 130:../sudoku_fsm.c ****         default:
+ 131:../sudoku_fsm.c ****             st = S_IDLE;
+ 1915              		.loc 1 131 0
+ 1916 052c 3C309FE5 		ldr	r3, .L47
+ 1917 0530 0020A0E3 		mov	r2, #0
+ 1918 0534 0020C3E5 		strb	r2, [r3, #0]
+ 132:../sudoku_fsm.c ****             break;
+ 1919              		.loc 1 132 0
+ 1920 0538 0000A0E1 		mov	r0, r0	@ nop
+ 1921 053c 080000EA 		b	.L10
+ 1922              	.L42:
+  52:../sudoku_fsm.c ****             break;
+ 1923              		.loc 1 52 0
+ 1924 0540 0000A0E1 		mov	r0, r0	@ nop
+ 1925 0544 060000EA 		b	.L10
+ 1926              	.L43:
+  64:../sudoku_fsm.c ****             break;
+ 1927              		.loc 1 64 0
+ 1928 0548 0000A0E1 		mov	r0, r0	@ nop
+ 1929 054c 040000EA 		b	.L10
+ 1930              	.L44:
+  83:../sudoku_fsm.c ****             break;
+ 1931              		.loc 1 83 0
+ 1932 0550 0000A0E1 		mov	r0, r0	@ nop
+ 1933 0554 020000EA 		b	.L10
+ 1934              	.L45:
+  93:../sudoku_fsm.c ****             break;
+ 1935              		.loc 1 93 0
+ 1936 0558 0000A0E1 		mov	r0, r0	@ nop
+ 1937 055c 000000EA 		b	.L10
+ 1938              	.L46:
+ 128:../sudoku_fsm.c ****             break;
+ 1939              		.loc 1 128 0
+ 1940 0560 0000A0E1 		mov	r0, r0	@ nop
+ 1941              	.L10:
+ 133:../sudoku_fsm.c ****     }
+ 134:../sudoku_fsm.c **** }
+ 1942              		.loc 1 134 0
+ 1943 0564 0CD04BE2 		sub	sp, fp, #12
+ 1944 0568 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1945 056c 1EFF2FE1 		bx	lr
+ 1946              	.L48:
+ 1947              		.align	2
+ 1948              	.L47:
+ 1949 0570 00000000 		.word	st
+ 1950 0574 04000000 		.word	sel_row
+ 1951 0578 08000000 		.word	sel_col
+ 1952 057c 0C000000 		.word	sel_val
+ 1953 0580 10000000 		.word	prev_val
+ 1954              		.cfi_endproc
+ 1955              	.LFE5:
+ 1957              	.Letext0:
+DEFINED SYMBOLS
+                            *ABS*:00000000 sudoku_fsm.c
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1333   .bss:00000000 st
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1334   .bss:00000000 $d
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1336   .bss:00000004 sel_row
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1339   .bss:00000008 sel_col
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1342   .bss:0000000c sel_val
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1345   .bss:00000010 prev_val
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1348   .text:00000000 $a
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1350   .text:00000000 show_F
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1378   .text:00000020 show_C
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1406   .text:00000040 show_E
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1434   .text:00000060 show_digit
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1482   .text:000000b0 sudoku_init
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1529   .text:00000110 $d
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1537   .text:00000124 $a
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1540   .text:00000124 sudoku_tick
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1573   .text:00000160 $d
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1581   .text:00000178 $a
+C:\Users\jorge\AppData\Local\Temp\ccvq7kah.s:1949   .text:00000570 $d
+                     .debug_frame:00000010 $d
+
+UNDEFINED SYMBOLS
+D8Led_symbol
+button_take_click
+button_take_inc_event
+sa_load_initial_board
+sa_is_pista
+sa_get_value
+sa_is_in_candidates
+sa_mark_cell_error
+Delay
+sa_set_value
+sa_recalc_all_candidates
+sa_propagate_value

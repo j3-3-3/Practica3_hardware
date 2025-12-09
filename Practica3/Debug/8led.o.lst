@@ -1,0 +1,149 @@
+   1              		.cpu arm7tdmi
+   2              		.fpu softvfp
+   3              		.eabi_attribute 20, 1
+   4              		.eabi_attribute 21, 1
+   5              		.eabi_attribute 23, 3
+   6              		.eabi_attribute 24, 1
+   7              		.eabi_attribute 25, 1
+   8              		.eabi_attribute 26, 1
+   9              		.eabi_attribute 30, 6
+  10              		.eabi_attribute 18, 4
+  11              		.file	"8led.c"
+  21              	.Ltext0:
+  22              		.file 1 "../8led.c"
+ 1930              		.align	2
+ 1933              	Symbol:
+ 1934 0000 12FFFFFF 		.word	-238
+ 1935 0004 9FFFFFFF 		.word	-97
+ 1936 0008 31FFFFFF 		.word	-207
+ 1937 000c 15FFFFFF 		.word	-235
+ 1938 0010 9CFFFFFF 		.word	-100
+ 1939 0014 54FFFFFF 		.word	-172
+ 1940 0018 D0FFFFFF 		.word	-48
+ 1941 001c 1FFFFFFF 		.word	-225
+ 1942 0020 10FFFFFF 		.word	-240
+ 1943 0024 1CFFFFFF 		.word	-228
+ 1944 0028 18FFFFFF 		.word	-232
+ 1945 002c D0FFFFFF 		.word	-48
+ 1946 0030 72FFFFFF 		.word	-142
+ 1947 0034 91FFFFFF 		.word	-111
+ 1948 0038 70FFFFFF 		.word	-144
+ 1949 003c 78FFFFFF 		.word	-136
+ 1950 0040 FFFFFFFF 		.word	-1
+ 1951              		.text
+ 1952              		.align	2
+ 1953              		.global	D8Led_init
+ 1955              	D8Led_init:
+ 1956              	.LFB0:
+   1:../8led.c     **** /*********************************************************************************************
+   2:../8led.c     **** * Fichero:	8led.c
+   3:../8led.c     **** * Autor:
+   4:../8led.c     **** * Descrip:	Funciones de control del display 8-segmentos
+   5:../8led.c     **** * Version:
+   6:../8led.c     **** *********************************************************************************************/
+   7:../8led.c     **** 
+   8:../8led.c     **** #include "8led.h"
+   9:../8led.c     **** #include "44b.h"
+  10:../8led.c     **** #include "44blib.h"
+  11:../8led.c     **** 
+  12:../8led.c     **** static int
+  13:../8led.c     **** Symbol[size_8led] = { cero, uno, dos, tres, cuatro, cinco, seis, siete,
+  14:../8led.c     **** 		              ocho, nueve, A, B, C, D, E, F, blank};
+  15:../8led.c     **** 
+  16:../8led.c     **** /* Estado inicial del display */
+  17:../8led.c     **** void D8Led_init(void)
+  18:../8led.c     **** {
+ 1957              		.loc 1 18 0
+ 1958              		.cfi_startproc
+ 1959              		@ Function supports interworking.
+ 1960              		@ args = 0, pretend = 0, frame = 0
+ 1961              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1962 0000 0DC0A0E1 		mov	ip, sp
+ 1963              	.LCFI0:
+ 1964              		.cfi_def_cfa_register 12
+ 1965 0004 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1966 0008 04B04CE2 		sub	fp, ip, #4
+ 1967              		.cfi_offset 14, -8
+ 1968              		.cfi_offset 13, -12
+ 1969              		.cfi_offset 11, -16
+ 1970              	.LCFI1:
+ 1971              		.cfi_def_cfa 11, 4
+  19:../8led.c     **** 	LED8ADDR = (unsigned char) F;
+ 1972              		.loc 1 19 0
+ 1973 000c 8537A0E3 		mov	r3, #34865152
+ 1974 0010 7820A0E3 		mov	r2, #120
+ 1975 0014 0020C3E5 		strb	r2, [r3, #0]
+  20:../8led.c     **** }
+ 1976              		.loc 1 20 0
+ 1977 0018 0CD04BE2 		sub	sp, fp, #12
+ 1978 001c 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1979 0020 1EFF2FE1 		bx	lr
+ 1980              		.cfi_endproc
+ 1981              	.LFE0:
+ 1983              		.align	2
+ 1984              		.global	D8Led_symbol
+ 1986              	D8Led_symbol:
+ 1987              	.LFB1:
+  21:../8led.c     **** 
+  22:../8led.c     **** /* Muestra el valor indicado en el display  */
+  23:../8led.c     **** void D8Led_symbol(int value)
+  24:../8led.c     **** {
+ 1988              		.loc 1 24 0
+ 1989              		.cfi_startproc
+ 1990              		@ Function supports interworking.
+ 1991              		@ args = 0, pretend = 0, frame = 8
+ 1992              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1993 0024 0DC0A0E1 		mov	ip, sp
+ 1994              	.LCFI2:
+ 1995              		.cfi_def_cfa_register 12
+ 1996 0028 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1997 002c 04B04CE2 		sub	fp, ip, #4
+ 1998              		.cfi_offset 14, -8
+ 1999              		.cfi_offset 13, -12
+ 2000              		.cfi_offset 11, -16
+ 2001              	.LCFI3:
+ 2002              		.cfi_def_cfa 11, 4
+ 2003 0030 08D04DE2 		sub	sp, sp, #8
+ 2004 0034 10000BE5 		str	r0, [fp, #-16]
+  25:../8led.c     **** 	if ((value >= 0) && (value < size_8led)) {
+ 2005              		.loc 1 25 0
+ 2006 0038 10301BE5 		ldr	r3, [fp, #-16]
+ 2007 003c 000053E3 		cmp	r3, #0
+ 2008 0040 080000BA 		blt	.L2
+ 2009              		.loc 1 25 0 is_stmt 0 discriminator 1
+ 2010 0044 10301BE5 		ldr	r3, [fp, #-16]
+ 2011 0048 100053E3 		cmp	r3, #16
+ 2012 004c 050000CA 		bgt	.L2
+  26:../8led.c     **** 		LED8ADDR = (unsigned char) Symbol[value];
+ 2013              		.loc 1 26 0 is_stmt 1
+ 2014 0050 8537A0E3 		mov	r3, #34865152
+ 2015 0054 18209FE5 		ldr	r2, .L4
+ 2016 0058 10101BE5 		ldr	r1, [fp, #-16]
+ 2017 005c 012192E7 		ldr	r2, [r2, r1, asl #2]
+ 2018 0060 FF2002E2 		and	r2, r2, #255
+ 2019 0064 0020C3E5 		strb	r2, [r3, #0]
+ 2020              	.L2:
+  27:../8led.c     **** 	}
+  28:../8led.c     **** }
+ 2021              		.loc 1 28 0
+ 2022 0068 0CD04BE2 		sub	sp, fp, #12
+ 2023 006c 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2024 0070 1EFF2FE1 		bx	lr
+ 2025              	.L5:
+ 2026              		.align	2
+ 2027              	.L4:
+ 2028 0074 00000000 		.word	Symbol
+ 2029              		.cfi_endproc
+ 2030              	.LFE1:
+ 2032              	.Letext0:
+DEFINED SYMBOLS
+                            *ABS*:00000000 8led.c
+C:\Users\jorge\AppData\Local\Temp\ccZY7btV.s:1930   .data:00000000 $d
+C:\Users\jorge\AppData\Local\Temp\ccZY7btV.s:1933   .data:00000000 Symbol
+C:\Users\jorge\AppData\Local\Temp\ccZY7btV.s:1952   .text:00000000 $a
+C:\Users\jorge\AppData\Local\Temp\ccZY7btV.s:1955   .text:00000000 D8Led_init
+C:\Users\jorge\AppData\Local\Temp\ccZY7btV.s:1986   .text:00000024 D8Led_symbol
+C:\Users\jorge\AppData\Local\Temp\ccZY7btV.s:2028   .text:00000074 $d
+                     .debug_frame:00000010 $d
+
+NO UNDEFINED SYMBOLS

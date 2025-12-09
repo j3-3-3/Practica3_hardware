@@ -1,0 +1,1038 @@
+   1              		.cpu arm7tdmi
+   2              		.fpu softvfp
+   3              		.eabi_attribute 20, 1
+   4              		.eabi_attribute 21, 1
+   5              		.eabi_attribute 23, 3
+   6              		.eabi_attribute 24, 1
+   7              		.eabi_attribute 25, 1
+   8              		.eabi_attribute 26, 1
+   9              		.eabi_attribute 30, 6
+  10              		.eabi_attribute 18, 4
+  11              		.file	"button.c"
+  21              	.Ltext0:
+  22              		.file 1 "../button.c"
+ 2167              	estado:
+ 2168 0000 00       		.space	1
+ 2169              	ultimo_boton:
+ 2170 0001 00       		.space	1
+ 2171              	last_click:
+ 2172 0002 00       		.space	1
+ 2173              	boton_repetido:
+ 2174 0003 00       		.space	1
+ 2175              	repeticiones_generadas:
+ 2176 0004 00       		.space	1
+ 2177 0005 000000   		.align	2
+ 2178              	rep_next:
+ 2179 0008 00000000 		.space	4
+ 2180              	incrementos:
+ 2181 000c 00       		.space	1
+ 2182 000d 000000   		.text
+ 2183              		.align	2
+ 2184              		.global	Eint4567_ISR
+ 2186              	Eint4567_ISR:
+ 2187              	.LFB0:
+   1:../button.c   **** // Fichero:	button.c
+   2:../button.c   **** 
+   3:../button.c   **** #include "button.h"
+   4:../button.c   **** #include "44b.h"
+   5:../button.c   **** #include "44blib.h"
+   6:../button.c   **** #include "cola.h"
+   7:../button.c   **** #include "eventos.h"
+   8:../button.c   **** #include "timer2.h"
+   9:../button.c   **** #include "timer3.h"
+  10:../button.c   **** 
+  11:../button.c   **** /* Parámetros de configuración */
+  12:../button.c   **** #define TIEMPO_REBOTE              20000u    /* 20 ms */
+  13:../button.c   **** #define ESPERA_REPETICION          600000u   /* 600 ms */
+  14:../button.c   **** #define RETARDO_REPETICION         300000u   /* 300 ms */
+  15:../button.c   **** 
+  16:../button.c   **** /* Estado interno */
+  17:../button.c   **** static volatile boton_estado_t estado = BOTON_ESPERA;
+  18:../button.c   **** static volatile uint8_t ultimo_boton = 0;
+  19:../button.c   **** static volatile uint8_t last_click   = 0;
+  20:../button.c   **** 
+  21:../button.c   **** /* Auto-repetición */
+  22:../button.c   **** static uint8_t  boton_repetido   = 0;
+  23:../button.c   **** static uint8_t  repeticiones_generadas = 0;
+  24:../button.c   **** static uint32_t rep_next   = 0;
+  25:../button.c   **** 
+  26:../button.c   **** static volatile uint8_t incrementos = 0;
+  27:../button.c   **** 
+  28:../button.c   **** static uint8_t leer_botones(void);
+  29:../button.c   **** static uint8_t lectura_doble_estable(uint8_t esperado);
+  30:../button.c   **** 
+  31:../button.c   **** /* ISR EINT6/EINT7: Gestión de los pulsadores y sus rebotes de pulsación */
+  32:../button.c   **** void Eint4567_ISR(void) __attribute__((interrupt("IRQ")));
+  33:../button.c   **** void Eint4567_ISR(void)
+  34:../button.c   **** {
+ 2188              		.loc 1 34 0
+ 2189              		.cfi_startproc
+ 2190              		@ Interrupt Service Routine.
+ 2191              		@ args = 0, pretend = 0, frame = 8
+ 2192              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2193 0000 04C02DE5 		str	ip, [sp, #-4]!
+ 2194 0004 0DC0A0E1 		mov	ip, sp
+ 2195              	.LCFI0:
+ 2196              		.cfi_def_cfa_register 12
+ 2197 0008 0FD82DE9 		stmfd	sp!, {r0, r1, r2, r3, fp, ip, lr, pc}
+ 2198 000c 04B04CE2 		sub	fp, ip, #4
+ 2199              		.cfi_offset 14, -8
+ 2200              		.cfi_offset 13, -12
+ 2201              		.cfi_offset 11, -16
+ 2202              		.cfi_offset 3, -20
+ 2203              		.cfi_offset 2, -24
+ 2204              		.cfi_offset 1, -28
+ 2205              		.cfi_offset 0, -32
+ 2206              	.LCFI1:
+ 2207              		.cfi_def_cfa 11, 4
+ 2208 0010 08D04DE2 		sub	sp, sp, #8
+  35:../button.c   ****     rINTMSK |= BIT_EINT4567;  /* mientras rebote, deshabilita nuevas externas */
+ 2209              		.loc 1 35 0
+ 2210 0014 08319FE5 		ldr	r3, .L7
+ 2211 0018 04219FE5 		ldr	r2, .L7
+ 2212 001c 002092E5 		ldr	r2, [r2, #0]
+ 2213 0020 022682E3 		orr	r2, r2, #2097152
+ 2214 0024 002083E5 		str	r2, [r3, #0]
+  36:../button.c   **** 
+  37:../button.c   ****     uint32_t t_us = timer2_count();
+ 2215              		.loc 1 37 0
+ 2216 0028 FEFFFFEB 		bl	timer2_count
+ 2217 002c 20000BE5 		str	r0, [fp, #-32]
+  38:../button.c   ****     uint32_t pend = rEXTINTPND;
+ 2218              		.loc 1 38 0
+ 2219 0030 F0309FE5 		ldr	r3, .L7+4
+ 2220 0034 003093E5 		ldr	r3, [r3, #0]
+ 2221 0038 24300BE5 		str	r3, [fp, #-36]
+  39:../button.c   **** 
+  40:../button.c   ****     if (pend & (1u << 2)) {                          /* EINT6 */
+ 2222              		.loc 1 40 0
+ 2223 003c 24301BE5 		ldr	r3, [fp, #-36]
+ 2224 0040 043003E2 		and	r3, r3, #4
+ 2225 0044 000053E3 		cmp	r3, #0
+ 2226 0048 0700000A 		beq	.L2
+  41:../button.c   ****         ultimo_boton = 1;
+ 2227              		.loc 1 41 0
+ 2228 004c D8309FE5 		ldr	r3, .L7+8
+ 2229 0050 0120A0E3 		mov	r2, #1
+ 2230 0054 0020C3E5 		strb	r2, [r3, #0]
+  42:../button.c   ****         cola_depuracion(t_us, EVT_BOTON_PRES, 1);
+ 2231              		.loc 1 42 0
+ 2232 0058 20001BE5 		ldr	r0, [fp, #-32]
+ 2233 005c 0510A0E3 		mov	r1, #5
+ 2234 0060 0120A0E3 		mov	r2, #1
+ 2235 0064 FEFFFFEB 		bl	cola_depuracion
+ 2236 0068 0E0000EA 		b	.L3
+ 2237              	.L2:
+  43:../button.c   ****     } else if (pend & (1u << 3)) {                   /* EINT7 */
+ 2238              		.loc 1 43 0
+ 2239 006c 24301BE5 		ldr	r3, [fp, #-36]
+ 2240 0070 083003E2 		and	r3, r3, #8
+ 2241 0074 000053E3 		cmp	r3, #0
+ 2242 0078 0700000A 		beq	.L4
+  44:../button.c   ****         ultimo_boton = 2;
+ 2243              		.loc 1 44 0
+ 2244 007c A8309FE5 		ldr	r3, .L7+8
+ 2245 0080 0220A0E3 		mov	r2, #2
+ 2246 0084 0020C3E5 		strb	r2, [r3, #0]
+  45:../button.c   ****         cola_depuracion(t_us, EVT_BOTON_PRES, 2);
+ 2247              		.loc 1 45 0
+ 2248 0088 20001BE5 		ldr	r0, [fp, #-32]
+ 2249 008c 0510A0E3 		mov	r1, #5
+ 2250 0090 0220A0E3 		mov	r2, #2
+ 2251 0094 FEFFFFEB 		bl	cola_depuracion
+ 2252 0098 020000EA 		b	.L3
+ 2253              	.L4:
+  46:../button.c   ****     } else {
+  47:../button.c   ****         ultimo_boton = 0;
+ 2254              		.loc 1 47 0
+ 2255 009c 88309FE5 		ldr	r3, .L7+8
+ 2256 00a0 0020A0E3 		mov	r2, #0
+ 2257 00a4 0020C3E5 		strb	r2, [r3, #0]
+ 2258              	.L3:
+  48:../button.c   ****     }
+  49:../button.c   **** 
+  50:../button.c   ****     if (ultimo_boton != 0) {
+ 2259              		.loc 1 50 0
+ 2260 00a8 7C309FE5 		ldr	r3, .L7+8
+ 2261 00ac 0030D3E5 		ldrb	r3, [r3, #0]
+ 2262 00b0 FF3003E2 		and	r3, r3, #255
+ 2263 00b4 000053E3 		cmp	r3, #0
+ 2264 00b8 0500000A 		beq	.L5
+  51:../button.c   ****         estado = BOTON_REBOTE_PRES;
+ 2265              		.loc 1 51 0
+ 2266 00bc 6C309FE5 		ldr	r3, .L7+12
+ 2267 00c0 0120A0E3 		mov	r2, #1
+ 2268 00c4 0020C3E5 		strb	r2, [r3, #0]
+  52:../button.c   ****         timer3_start(TIEMPO_REBOTE);
+ 2269              		.loc 1 52 0
+ 2270 00c8 64009FE5 		ldr	r0, .L7+16
+ 2271 00cc FEFFFFEB 		bl	timer3_start
+ 2272 00d0 070000EA 		b	.L6
+ 2273              	.L5:
+  53:../button.c   ****     } else {
+  54:../button.c   ****         estado = BOTON_ESPERA;
+ 2274              		.loc 1 54 0
+ 2275 00d4 54309FE5 		ldr	r3, .L7+12
+ 2276 00d8 0020A0E3 		mov	r2, #0
+ 2277 00dc 0020C3E5 		strb	r2, [r3, #0]
+  55:../button.c   ****         rINTMSK &= ~(BIT_EINT4567);
+ 2278              		.loc 1 55 0
+ 2279 00e0 3C309FE5 		ldr	r3, .L7
+ 2280 00e4 38209FE5 		ldr	r2, .L7
+ 2281 00e8 002092E5 		ldr	r2, [r2, #0]
+ 2282 00ec 0226C2E3 		bic	r2, r2, #2097152
+ 2283 00f0 002083E5 		str	r2, [r3, #0]
+ 2284              	.L6:
+  56:../button.c   ****     }
+  57:../button.c   **** 
+  58:../button.c   ****     rEXTINTPND = (1u << 2) | (1u << 3);
+ 2285              		.loc 1 58 0
+ 2286 00f4 2C309FE5 		ldr	r3, .L7+4
+ 2287 00f8 0C20A0E3 		mov	r2, #12
+ 2288 00fc 002083E5 		str	r2, [r3, #0]
+  59:../button.c   ****     rI_ISPC   |= BIT_EINT4567;
+ 2289              		.loc 1 59 0
+ 2290 0100 30309FE5 		ldr	r3, .L7+20
+ 2291 0104 2C209FE5 		ldr	r2, .L7+20
+ 2292 0108 002092E5 		ldr	r2, [r2, #0]
+ 2293 010c 022682E3 		orr	r2, r2, #2097152
+ 2294 0110 002083E5 		str	r2, [r3, #0]
+  60:../button.c   **** }
+ 2295              		.loc 1 60 0
+ 2296 0114 1CD04BE2 		sub	sp, fp, #28
+ 2297 0118 0F689DE8 		ldmfd	sp, {r0, r1, r2, r3, fp, sp, lr}
+ 2298 011c 04C09DE4 		ldmfd	sp!, {ip}
+ 2299 0120 04F05EE2 		subs	pc, lr, #4
+ 2300              	.L8:
+ 2301              		.align	2
+ 2302              	.L7:
+ 2303 0124 0C00E001 		.word	31457292
+ 2304 0128 5400D201 		.word	30539860
+ 2305 012c 01000000 		.word	ultimo_boton
+ 2306 0130 00000000 		.word	estado
+ 2307 0134 204E0000 		.word	20000
+ 2308 0138 2400E001 		.word	31457316
+ 2309              		.cfi_endproc
+ 2310              	.LFE0:
+ 2312              		.align	2
+ 2313              		.global	button_gestion_timer
+ 2315              	button_gestion_timer:
+ 2316              	.LFB1:
+  61:../button.c   **** 
+  62:../button.c   **** /* Llamada en main. Gestión de estados de los pulsadores. */
+  63:../button.c   **** void button_gestion_timer(void)
+  64:../button.c   **** {
+ 2317              		.loc 1 64 0
+ 2318              		.cfi_startproc
+ 2319              		@ Function supports interworking.
+ 2320              		@ args = 0, pretend = 0, frame = 8
+ 2321              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2322 013c 0DC0A0E1 		mov	ip, sp
+ 2323              	.LCFI2:
+ 2324              		.cfi_def_cfa_register 12
+ 2325 0140 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2326 0144 04B04CE2 		sub	fp, ip, #4
+ 2327              		.cfi_offset 14, -8
+ 2328              		.cfi_offset 13, -12
+ 2329              		.cfi_offset 11, -16
+ 2330              	.LCFI3:
+ 2331              		.cfi_def_cfa 11, 4
+ 2332 0148 08D04DE2 		sub	sp, sp, #8
+  65:../button.c   ****     uint32_t ahora = timer2_count();
+ 2333              		.loc 1 65 0
+ 2334 014c FEFFFFEB 		bl	timer2_count
+ 2335 0150 10000BE5 		str	r0, [fp, #-16]
+  66:../button.c   **** 
+  67:../button.c   ****     switch (estado)
+ 2336              		.loc 1 67 0
+ 2337 0154 0C339FE5 		ldr	r3, .L29
+ 2338 0158 0030D3E5 		ldrb	r3, [r3, #0]
+ 2339 015c FF3003E2 		and	r3, r3, #255
+ 2340 0160 020053E3 		cmp	r3, #2
+ 2341 0164 3700000A 		beq	.L12
+ 2342 0168 030053E3 		cmp	r3, #3
+ 2343 016c 6700000A 		beq	.L13
+ 2344 0170 010053E3 		cmp	r3, #1
+ 2345 0174 B100001A 		bne	.L25
+ 2346              	.L11:
+  68:../button.c   ****     {
+  69:../button.c   ****         case BOTON_REBOTE_PRES:
+  70:../button.c   ****             /* Ejecutado únicamente al finalizar el rebote.
+  71:../button.c   ****                Confirmamos pulsación estable con lectura doble. */
+  72:../button.c   ****             if (lectura_doble_estable(ultimo_boton)) {
+ 2347              		.loc 1 72 0
+ 2348 0178 EC329FE5 		ldr	r3, .L29+4
+ 2349 017c 0030D3E5 		ldrb	r3, [r3, #0]
+ 2350 0180 FF3003E2 		and	r3, r3, #255
+ 2351 0184 0300A0E1 		mov	r0, r3
+ 2352 0188 FF0000EB 		bl	lectura_doble_estable
+ 2353 018c 0030A0E1 		mov	r3, r0
+ 2354 0190 000053E3 		cmp	r3, #0
+ 2355 0194 1F00000A 		beq	.L14
+  73:../button.c   ****                 estado = BOTON_PULSADO;
+ 2356              		.loc 1 73 0
+ 2357 0198 C8329FE5 		ldr	r3, .L29
+ 2358 019c 0220A0E3 		mov	r2, #2
+ 2359 01a0 0020C3E5 		strb	r2, [r3, #0]
+  74:../button.c   ****                 cola_depuracion(ahora, EVT_BOTON_ESTABLE, ultimo_boton);
+ 2360              		.loc 1 74 0
+ 2361 01a4 C0329FE5 		ldr	r3, .L29+4
+ 2362 01a8 0030D3E5 		ldrb	r3, [r3, #0]
+ 2363 01ac FF3003E2 		and	r3, r3, #255
+ 2364 01b0 10001BE5 		ldr	r0, [fp, #-16]
+ 2365 01b4 0610A0E3 		mov	r1, #6
+ 2366 01b8 0320A0E1 		mov	r2, r3
+ 2367 01bc FEFFFFEB 		bl	cola_depuracion
+  75:../button.c   ****                 if (ultimo_boton == 2) {
+ 2368              		.loc 1 75 0
+ 2369 01c0 A4329FE5 		ldr	r3, .L29+4
+ 2370 01c4 0030D3E5 		ldrb	r3, [r3, #0]
+ 2371 01c8 FF3003E2 		and	r3, r3, #255
+ 2372 01cc 020053E3 		cmp	r3, #2
+ 2373 01d0 0A00001A 		bne	.L15
+  76:../button.c   ****                 	boton_repetido    = 2;
+ 2374              		.loc 1 76 0
+ 2375 01d4 94329FE5 		ldr	r3, .L29+8
+ 2376 01d8 0220A0E3 		mov	r2, #2
+ 2377 01dc 0020C3E5 		strb	r2, [r3, #0]
+  77:../button.c   ****                 	repeticiones_generadas = 0;
+ 2378              		.loc 1 77 0
+ 2379 01e0 8C329FE5 		ldr	r3, .L29+12
+ 2380 01e4 0020A0E3 		mov	r2, #0
+ 2381 01e8 0020C3E5 		strb	r2, [r3, #0]
+  78:../button.c   ****                 	rep_next   = ahora + ESPERA_REPETICION;
+ 2382              		.loc 1 78 0
+ 2383 01ec 10301BE5 		ldr	r3, [fp, #-16]
+ 2384 01f0 923A83E2 		add	r3, r3, #598016
+ 2385 01f4 1F3D83E2 		add	r3, r3, #1984
+ 2386 01f8 78229FE5 		ldr	r2, .L29+16
+ 2387 01fc 003082E5 		str	r3, [r2, #0]
+ 2388              	.L15:
+  79:../button.c   ****                 }
+  80:../button.c   ****                 /* Rehabilitamos interrupciones externas para detectar la liberación posterior */
+  81:../button.c   ****                 rINTMSK &= ~(BIT_EINT4567);
+ 2389              		.loc 1 81 0
+ 2390 0200 74329FE5 		ldr	r3, .L29+20
+ 2391 0204 70229FE5 		ldr	r2, .L29+20
+ 2392 0208 002092E5 		ldr	r2, [r2, #0]
+ 2393 020c 0226C2E3 		bic	r2, r2, #2097152
+ 2394 0210 002083E5 		str	r2, [r3, #0]
+  82:../button.c   ****             } else {
+  83:../button.c   ****                 /* Si falla el rebote, volver a espera */
+  84:../button.c   ****                 estado = BOTON_ESPERA;
+  85:../button.c   ****                 ultimo_boton = 0;
+  86:../button.c   ****                 rINTMSK &= ~(BIT_EINT4567);
+  87:../button.c   ****             }
+  88:../button.c   ****             break;
+ 2395              		.loc 1 88 0
+ 2396 0214 900000EA 		b	.L9
+ 2397              	.L14:
+  84:../button.c   ****                 estado = BOTON_ESPERA;
+ 2398              		.loc 1 84 0
+ 2399 0218 48329FE5 		ldr	r3, .L29
+ 2400 021c 0020A0E3 		mov	r2, #0
+ 2401 0220 0020C3E5 		strb	r2, [r3, #0]
+  85:../button.c   ****                 ultimo_boton = 0;
+ 2402              		.loc 1 85 0
+ 2403 0224 40329FE5 		ldr	r3, .L29+4
+ 2404 0228 0020A0E3 		mov	r2, #0
+ 2405 022c 0020C3E5 		strb	r2, [r3, #0]
+  86:../button.c   ****                 rINTMSK &= ~(BIT_EINT4567);
+ 2406              		.loc 1 86 0
+ 2407 0230 44329FE5 		ldr	r3, .L29+20
+ 2408 0234 40229FE5 		ldr	r2, .L29+20
+ 2409 0238 002092E5 		ldr	r2, [r2, #0]
+ 2410 023c 0226C2E3 		bic	r2, r2, #2097152
+ 2411 0240 002083E5 		str	r2, [r3, #0]
+ 2412              		.loc 1 88 0
+ 2413 0244 840000EA 		b	.L9
+ 2414              	.L12:
+ 2415              	.LBB2:
+  89:../button.c   **** 
+  90:../button.c   ****         case BOTON_PULSADO: {
+  91:../button.c   ****             uint8_t lec = leer_botones();
+ 2416              		.loc 1 91 0
+ 2417 0248 B60000EB 		bl	leer_botones
+ 2418 024c 0030A0E1 		mov	r3, r0
+ 2419 0250 11304BE5 		strb	r3, [fp, #-17]
+  92:../button.c   ****             if (lec == 0) {
+ 2420              		.loc 1 92 0
+ 2421 0254 11305BE5 		ldrb	r3, [fp, #-17]	@ zero_extendqisi2
+ 2422 0258 000053E3 		cmp	r3, #0
+ 2423 025c 0500001A 		bne	.L18
+  93:../button.c   ****                 /* Inicio rebote de liberación */
+  94:../button.c   ****                 estado = BOTON_REBOTE_LIB;
+ 2424              		.loc 1 94 0
+ 2425 0260 00329FE5 		ldr	r3, .L29
+ 2426 0264 0320A0E3 		mov	r2, #3
+ 2427 0268 0020C3E5 		strb	r2, [r3, #0]
+  95:../button.c   ****                 timer3_start(TIEMPO_REBOTE);
+ 2428              		.loc 1 95 0
+ 2429 026c 0C029FE5 		ldr	r0, .L29+24
+ 2430 0270 FEFFFFEB 		bl	timer3_start
+  96:../button.c   ****             } else {
+  97:../button.c   ****                 /* Auto-repetición para botón derecho */
+  98:../button.c   ****                 if (boton_repetido == 2 && lec == 2) {
+  99:../button.c   ****                     if ((int32_t)(ahora - rep_next) >= 0) {
+ 100:../button.c   ****                         if (incrementos < 255)
+ 101:../button.c   ****                         	incrementos++;
+ 102:../button.c   ****                         repeticiones_generadas++;
+ 103:../button.c   ****                         rep_next += RETARDO_REPETICION;
+ 104:../button.c   ****                     }
+ 105:../button.c   ****                 }
+ 106:../button.c   ****             }
+ 107:../button.c   ****             break;
+ 2431              		.loc 1 107 0
+ 2432 0274 780000EA 		b	.L9
+ 2433              	.L18:
+  98:../button.c   ****                 if (boton_repetido == 2 && lec == 2) {
+ 2434              		.loc 1 98 0
+ 2435 0278 F0319FE5 		ldr	r3, .L29+8
+ 2436 027c 0030D3E5 		ldrb	r3, [r3, #0]	@ zero_extendqisi2
+ 2437 0280 020053E3 		cmp	r3, #2
+ 2438 0284 6F00001A 		bne	.L26
+  98:../button.c   ****                 if (boton_repetido == 2 && lec == 2) {
+ 2439              		.loc 1 98 0 is_stmt 0 discriminator 1
+ 2440 0288 11305BE5 		ldrb	r3, [fp, #-17]	@ zero_extendqisi2
+ 2441 028c 020053E3 		cmp	r3, #2
+ 2442 0290 6E00001A 		bne	.L27
+  99:../button.c   ****                     if ((int32_t)(ahora - rep_next) >= 0) {
+ 2443              		.loc 1 99 0 is_stmt 1
+ 2444 0294 DC319FE5 		ldr	r3, .L29+16
+ 2445 0298 003093E5 		ldr	r3, [r3, #0]
+ 2446 029c 10201BE5 		ldr	r2, [fp, #-16]
+ 2447 02a0 023063E0 		rsb	r3, r3, r2
+ 2448 02a4 000053E3 		cmp	r3, #0
+ 2449 02a8 6A0000BA 		blt	.L28
+ 100:../button.c   ****                         if (incrementos < 255)
+ 2450              		.loc 1 100 0
+ 2451 02ac D0319FE5 		ldr	r3, .L29+28
+ 2452 02b0 0030D3E5 		ldrb	r3, [r3, #0]
+ 2453 02b4 FF3003E2 		and	r3, r3, #255
+ 2454 02b8 FF0053E3 		cmp	r3, #255
+ 2455 02bc 0600000A 		beq	.L20
+ 101:../button.c   ****                         	incrementos++;
+ 2456              		.loc 1 101 0
+ 2457 02c0 BC319FE5 		ldr	r3, .L29+28
+ 2458 02c4 0030D3E5 		ldrb	r3, [r3, #0]
+ 2459 02c8 FF3003E2 		and	r3, r3, #255
+ 2460 02cc 013083E2 		add	r3, r3, #1
+ 2461 02d0 FF2003E2 		and	r2, r3, #255
+ 2462 02d4 A8319FE5 		ldr	r3, .L29+28
+ 2463 02d8 0020C3E5 		strb	r2, [r3, #0]
+ 2464              	.L20:
+ 102:../button.c   ****                         repeticiones_generadas++;
+ 2465              		.loc 1 102 0
+ 2466 02dc 90319FE5 		ldr	r3, .L29+12
+ 2467 02e0 0030D3E5 		ldrb	r3, [r3, #0]	@ zero_extendqisi2
+ 2468 02e4 013083E2 		add	r3, r3, #1
+ 2469 02e8 FF2003E2 		and	r2, r3, #255
+ 2470 02ec 80319FE5 		ldr	r3, .L29+12
+ 2471 02f0 0020C3E5 		strb	r2, [r3, #0]
+ 103:../button.c   ****                         rep_next += RETARDO_REPETICION;
+ 2472              		.loc 1 103 0
+ 2473 02f4 7C319FE5 		ldr	r3, .L29+16
+ 2474 02f8 003093E5 		ldr	r3, [r3, #0]
+ 2475 02fc 493A83E2 		add	r3, r3, #299008
+ 2476 0300 3E3E83E2 		add	r3, r3, #992
+ 2477 0304 6C219FE5 		ldr	r2, .L29+16
+ 2478 0308 003082E5 		str	r3, [r2, #0]
+ 2479              		.loc 1 107 0
+ 2480 030c 520000EA 		b	.L9
+ 2481              	.L13:
+ 2482              	.LBE2:
+ 108:../button.c   ****         }
+ 109:../button.c   **** 
+ 110:../button.c   ****         case BOTON_REBOTE_LIB:
+ 111:../button.c   ****             /* Se procesa al expirar Timer3 */
+ 112:../button.c   ****             if (lectura_doble_estable(0)) {
+ 2483              		.loc 1 112 0
+ 2484 0310 0000A0E3 		mov	r0, #0
+ 2485 0314 9C0000EB 		bl	lectura_doble_estable
+ 2486 0318 0030A0E1 		mov	r3, r0
+ 2487 031c 000053E3 		cmp	r3, #0
+ 2488 0320 3D00000A 		beq	.L21
+ 113:../button.c   ****                 cola_depuracion(ahora, EVT_BOTON_LIBERA, ultimo_boton);
+ 2489              		.loc 1 113 0
+ 2490 0324 40319FE5 		ldr	r3, .L29+4
+ 2491 0328 0030D3E5 		ldrb	r3, [r3, #0]
+ 2492 032c FF3003E2 		and	r3, r3, #255
+ 2493 0330 10001BE5 		ldr	r0, [fp, #-16]
+ 2494 0334 0710A0E3 		mov	r1, #7
+ 2495 0338 0320A0E1 		mov	r2, r3
+ 2496 033c FEFFFFEB 		bl	cola_depuracion
+ 114:../button.c   ****                 cola_depuracion(ahora, EVT_BOTON_LISTO,  ultimo_boton);
+ 2497              		.loc 1 114 0
+ 2498 0340 24319FE5 		ldr	r3, .L29+4
+ 2499 0344 0030D3E5 		ldrb	r3, [r3, #0]
+ 2500 0348 FF3003E2 		and	r3, r3, #255
+ 2501 034c 10001BE5 		ldr	r0, [fp, #-16]
+ 2502 0350 0810A0E3 		mov	r1, #8
+ 2503 0354 0320A0E1 		mov	r2, r3
+ 2504 0358 FEFFFFEB 		bl	cola_depuracion
+ 115:../button.c   **** 
+ 116:../button.c   ****                 if (ultimo_boton == 1) {
+ 2505              		.loc 1 116 0
+ 2506 035c 08319FE5 		ldr	r3, .L29+4
+ 2507 0360 0030D3E5 		ldrb	r3, [r3, #0]
+ 2508 0364 FF3003E2 		and	r3, r3, #255
+ 2509 0368 010053E3 		cmp	r3, #1
+ 2510 036c 0300001A 		bne	.L22
+ 117:../button.c   ****                     last_click = 1;
+ 2511              		.loc 1 117 0
+ 2512 0370 10319FE5 		ldr	r3, .L29+32
+ 2513 0374 0120A0E3 		mov	r2, #1
+ 2514 0378 0020C3E5 		strb	r2, [r3, #0]
+ 2515 037c 140000EA 		b	.L23
+ 2516              	.L22:
+ 118:../button.c   ****                 } else if (ultimo_boton == 2) {
+ 2517              		.loc 1 118 0
+ 2518 0380 E4309FE5 		ldr	r3, .L29+4
+ 2519 0384 0030D3E5 		ldrb	r3, [r3, #0]
+ 2520 0388 FF3003E2 		and	r3, r3, #255
+ 2521 038c 020053E3 		cmp	r3, #2
+ 2522 0390 0F00001A 		bne	.L23
+ 119:../button.c   ****                     /* Pulsación corta (sin repetir) => un incremento */
+ 120:../button.c   ****                     if (repeticiones_generadas == 0 && incrementos < 255)
+ 2523              		.loc 1 120 0
+ 2524 0394 D8309FE5 		ldr	r3, .L29+12
+ 2525 0398 0030D3E5 		ldrb	r3, [r3, #0]	@ zero_extendqisi2
+ 2526 039c 000053E3 		cmp	r3, #0
+ 2527 03a0 0B00001A 		bne	.L23
+ 2528              		.loc 1 120 0 is_stmt 0 discriminator 1
+ 2529 03a4 D8309FE5 		ldr	r3, .L29+28
+ 2530 03a8 0030D3E5 		ldrb	r3, [r3, #0]
+ 2531 03ac FF3003E2 		and	r3, r3, #255
+ 2532 03b0 FF0053E3 		cmp	r3, #255
+ 2533 03b4 0600000A 		beq	.L23
+ 121:../button.c   ****                     	incrementos++;
+ 2534              		.loc 1 121 0 is_stmt 1
+ 2535 03b8 C4309FE5 		ldr	r3, .L29+28
+ 2536 03bc 0030D3E5 		ldrb	r3, [r3, #0]
+ 2537 03c0 FF3003E2 		and	r3, r3, #255
+ 2538 03c4 013083E2 		add	r3, r3, #1
+ 2539 03c8 FF2003E2 		and	r2, r3, #255
+ 2540 03cc B0309FE5 		ldr	r3, .L29+28
+ 2541 03d0 0020C3E5 		strb	r2, [r3, #0]
+ 2542              	.L23:
+ 122:../button.c   ****                 }
+ 123:../button.c   **** 
+ 124:../button.c   ****                 ultimo_boton = 0;
+ 2543              		.loc 1 124 0
+ 2544 03d4 90309FE5 		ldr	r3, .L29+4
+ 2545 03d8 0020A0E3 		mov	r2, #0
+ 2546 03dc 0020C3E5 		strb	r2, [r3, #0]
+ 125:../button.c   ****                 boton_repetido = 0;
+ 2547              		.loc 1 125 0
+ 2548 03e0 88309FE5 		ldr	r3, .L29+8
+ 2549 03e4 0020A0E3 		mov	r2, #0
+ 2550 03e8 0020C3E5 		strb	r2, [r3, #0]
+ 126:../button.c   ****                 repeticiones_generadas = 0;
+ 2551              		.loc 1 126 0
+ 2552 03ec 80309FE5 		ldr	r3, .L29+12
+ 2553 03f0 0020A0E3 		mov	r2, #0
+ 2554 03f4 0020C3E5 		strb	r2, [r3, #0]
+ 127:../button.c   ****                 estado = BOTON_ESPERA;
+ 2555              		.loc 1 127 0
+ 2556 03f8 68309FE5 		ldr	r3, .L29
+ 2557 03fc 0020A0E3 		mov	r2, #0
+ 2558 0400 0020C3E5 		strb	r2, [r3, #0]
+ 128:../button.c   ****                 rINTMSK &= ~(BIT_EINT4567);
+ 2559              		.loc 1 128 0
+ 2560 0404 70309FE5 		ldr	r3, .L29+20
+ 2561 0408 6C209FE5 		ldr	r2, .L29+20
+ 2562 040c 002092E5 		ldr	r2, [r2, #0]
+ 2563 0410 0226C2E3 		bic	r2, r2, #2097152
+ 2564 0414 002083E5 		str	r2, [r3, #0]
+ 129:../button.c   ****             } else {
+ 130:../button.c   ****                 /* Ruido: volver a considerar pulsado */
+ 131:../button.c   ****                 estado = BOTON_PULSADO;
+ 132:../button.c   ****                 rINTMSK &= ~(BIT_EINT4567);
+ 133:../button.c   ****             }
+ 134:../button.c   ****             break;
+ 2565              		.loc 1 134 0
+ 2566 0418 0F0000EA 		b	.L9
+ 2567              	.L21:
+ 131:../button.c   ****                 estado = BOTON_PULSADO;
+ 2568              		.loc 1 131 0
+ 2569 041c 44309FE5 		ldr	r3, .L29
+ 2570 0420 0220A0E3 		mov	r2, #2
+ 2571 0424 0020C3E5 		strb	r2, [r3, #0]
+ 132:../button.c   ****                 rINTMSK &= ~(BIT_EINT4567);
+ 2572              		.loc 1 132 0
+ 2573 0428 4C309FE5 		ldr	r3, .L29+20
+ 2574 042c 48209FE5 		ldr	r2, .L29+20
+ 2575 0430 002092E5 		ldr	r2, [r2, #0]
+ 2576 0434 0226C2E3 		bic	r2, r2, #2097152
+ 2577 0438 002083E5 		str	r2, [r3, #0]
+ 2578              		.loc 1 134 0
+ 2579 043c 060000EA 		b	.L9
+ 2580              	.L25:
+ 135:../button.c   **** 
+ 136:../button.c   ****         default:
+ 137:../button.c   ****             break;
+ 2581              		.loc 1 137 0
+ 2582 0440 0000A0E1 		mov	r0, r0	@ nop
+ 2583 0444 040000EA 		b	.L9
+ 2584              	.L26:
+ 2585              	.LBB3:
+ 107:../button.c   ****             break;
+ 2586              		.loc 1 107 0
+ 2587 0448 0000A0E1 		mov	r0, r0	@ nop
+ 2588 044c 020000EA 		b	.L9
+ 2589              	.L27:
+ 2590 0450 0000A0E1 		mov	r0, r0	@ nop
+ 2591 0454 000000EA 		b	.L9
+ 2592              	.L28:
+ 2593 0458 0000A0E1 		mov	r0, r0	@ nop
+ 2594              	.L9:
+ 2595              	.LBE3:
+ 138:../button.c   ****     }
+ 139:../button.c   **** }
+ 2596              		.loc 1 139 0
+ 2597 045c 0CD04BE2 		sub	sp, fp, #12
+ 2598 0460 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2599 0464 1EFF2FE1 		bx	lr
+ 2600              	.L30:
+ 2601              		.align	2
+ 2602              	.L29:
+ 2603 0468 00000000 		.word	estado
+ 2604 046c 01000000 		.word	ultimo_boton
+ 2605 0470 03000000 		.word	boton_repetido
+ 2606 0474 04000000 		.word	repeticiones_generadas
+ 2607 0478 08000000 		.word	rep_next
+ 2608 047c 0C00E001 		.word	31457292
+ 2609 0480 204E0000 		.word	20000
+ 2610 0484 0C000000 		.word	incrementos
+ 2611 0488 02000000 		.word	last_click
+ 2612              		.cfi_endproc
+ 2613              	.LFE1:
+ 2615              		.align	2
+ 2616              		.global	button_recibir_click
+ 2618              	button_recibir_click:
+ 2619              	.LFB2:
+ 140:../button.c   **** 
+ 141:../button.c   **** /* Consumo de eventos */
+ 142:../button.c   **** uint8_t button_recibir_click(void)
+ 143:../button.c   **** {
+ 2620              		.loc 1 143 0
+ 2621              		.cfi_startproc
+ 2622              		@ Function supports interworking.
+ 2623              		@ args = 0, pretend = 0, frame = 8
+ 2624              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2625 048c 0DC0A0E1 		mov	ip, sp
+ 2626              	.LCFI4:
+ 2627              		.cfi_def_cfa_register 12
+ 2628 0490 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2629 0494 04B04CE2 		sub	fp, ip, #4
+ 2630              		.cfi_offset 14, -8
+ 2631              		.cfi_offset 13, -12
+ 2632              		.cfi_offset 11, -16
+ 2633              	.LCFI5:
+ 2634              		.cfi_def_cfa 11, 4
+ 2635 0498 08D04DE2 		sub	sp, sp, #8
+ 144:../button.c   ****     uint8_t c = last_click;
+ 2636              		.loc 1 144 0
+ 2637 049c 24309FE5 		ldr	r3, .L32
+ 2638 04a0 0030D3E5 		ldrb	r3, [r3, #0]
+ 2639 04a4 0D304BE5 		strb	r3, [fp, #-13]
+ 145:../button.c   ****     last_click = 0;
+ 2640              		.loc 1 145 0
+ 2641 04a8 18309FE5 		ldr	r3, .L32
+ 2642 04ac 0020A0E3 		mov	r2, #0
+ 2643 04b0 0020C3E5 		strb	r2, [r3, #0]
+ 146:../button.c   ****     return c;
+ 2644              		.loc 1 146 0
+ 2645 04b4 0D305BE5 		ldrb	r3, [fp, #-13]	@ zero_extendqisi2
+ 147:../button.c   **** }
+ 2646              		.loc 1 147 0
+ 2647 04b8 0300A0E1 		mov	r0, r3
+ 2648 04bc 0CD04BE2 		sub	sp, fp, #12
+ 2649 04c0 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2650 04c4 1EFF2FE1 		bx	lr
+ 2651              	.L33:
+ 2652              		.align	2
+ 2653              	.L32:
+ 2654 04c8 02000000 		.word	last_click
+ 2655              		.cfi_endproc
+ 2656              	.LFE2:
+ 2658              		.align	2
+ 2659              		.global	button_recibir_incremento
+ 2661              	button_recibir_incremento:
+ 2662              	.LFB3:
+ 148:../button.c   **** 
+ 149:../button.c   **** /* Consumo de eventos */
+ 150:../button.c   **** uint8_t button_recibir_incremento(void)
+ 151:../button.c   **** {
+ 2663              		.loc 1 151 0
+ 2664              		.cfi_startproc
+ 2665              		@ Function supports interworking.
+ 2666              		@ args = 0, pretend = 0, frame = 0
+ 2667              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2668 04cc 0DC0A0E1 		mov	ip, sp
+ 2669              	.LCFI6:
+ 2670              		.cfi_def_cfa_register 12
+ 2671 04d0 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2672 04d4 04B04CE2 		sub	fp, ip, #4
+ 2673              		.cfi_offset 14, -8
+ 2674              		.cfi_offset 13, -12
+ 2675              		.cfi_offset 11, -16
+ 2676              	.LCFI7:
+ 2677              		.cfi_def_cfa 11, 4
+ 152:../button.c   ****     if (incrementos) {
+ 2678              		.loc 1 152 0
+ 2679 04d8 44309FE5 		ldr	r3, .L37
+ 2680 04dc 0030D3E5 		ldrb	r3, [r3, #0]
+ 2681 04e0 FF3003E2 		and	r3, r3, #255
+ 2682 04e4 000053E3 		cmp	r3, #0
+ 2683 04e8 0800000A 		beq	.L35
+ 153:../button.c   ****     	incrementos--;
+ 2684              		.loc 1 153 0
+ 2685 04ec 30309FE5 		ldr	r3, .L37
+ 2686 04f0 0030D3E5 		ldrb	r3, [r3, #0]
+ 2687 04f4 FF3003E2 		and	r3, r3, #255
+ 2688 04f8 013043E2 		sub	r3, r3, #1
+ 2689 04fc FF2003E2 		and	r2, r3, #255
+ 2690 0500 1C309FE5 		ldr	r3, .L37
+ 2691 0504 0020C3E5 		strb	r2, [r3, #0]
+ 154:../button.c   ****         return 1;
+ 2692              		.loc 1 154 0
+ 2693 0508 0130A0E3 		mov	r3, #1
+ 2694 050c 000000EA 		b	.L36
+ 2695              	.L35:
+ 155:../button.c   ****     }
+ 156:../button.c   ****     return 0;
+ 2696              		.loc 1 156 0
+ 2697 0510 0030A0E3 		mov	r3, #0
+ 2698              	.L36:
+ 157:../button.c   **** }
+ 2699              		.loc 1 157 0
+ 2700 0514 0300A0E1 		mov	r0, r3
+ 2701 0518 0CD04BE2 		sub	sp, fp, #12
+ 2702 051c 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2703 0520 1EFF2FE1 		bx	lr
+ 2704              	.L38:
+ 2705              		.align	2
+ 2706              	.L37:
+ 2707 0524 0C000000 		.word	incrementos
+ 2708              		.cfi_endproc
+ 2709              	.LFE3:
+ 2711              		.align	2
+ 2713              	leer_botones:
+ 2714              	.LFB4:
+ 158:../button.c   **** 
+ 159:../button.c   **** /* Lecturas físicas de los pulsadores */
+ 160:../button.c   **** static uint8_t leer_botones(void)
+ 161:../button.c   **** {
+ 2715              		.loc 1 161 0
+ 2716              		.cfi_startproc
+ 2717              		@ Function supports interworking.
+ 2718              		@ args = 0, pretend = 0, frame = 8
+ 2719              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2720 0528 0DC0A0E1 		mov	ip, sp
+ 2721              	.LCFI8:
+ 2722              		.cfi_def_cfa_register 12
+ 2723 052c 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2724 0530 04B04CE2 		sub	fp, ip, #4
+ 2725              		.cfi_offset 14, -8
+ 2726              		.cfi_offset 13, -12
+ 2727              		.cfi_offset 11, -16
+ 2728              	.LCFI9:
+ 2729              		.cfi_def_cfa 11, 4
+ 2730 0534 08D04DE2 		sub	sp, sp, #8
+ 162:../button.c   ****     uint32_t v = rPDATG;
+ 2731              		.loc 1 162 0
+ 2732 0538 48309FE5 		ldr	r3, .L43
+ 2733 053c 003093E5 		ldr	r3, [r3, #0]
+ 2734 0540 10300BE5 		str	r3, [fp, #-16]
+ 163:../button.c   ****     if (!(v & (1<<6))) return 1;    // 1 -> botón izquierdo
+ 2735              		.loc 1 163 0
+ 2736 0544 10301BE5 		ldr	r3, [fp, #-16]
+ 2737 0548 403003E2 		and	r3, r3, #64
+ 2738 054c 000053E3 		cmp	r3, #0
+ 2739 0550 0100001A 		bne	.L40
+ 2740              		.loc 1 163 0 is_stmt 0 discriminator 1
+ 2741 0554 0130A0E3 		mov	r3, #1
+ 2742 0558 060000EA 		b	.L41
+ 2743              	.L40:
+ 164:../button.c   ****     if (!(v & (1<<7))) return 2;    // 2 -> botón derecho
+ 2744              		.loc 1 164 0 is_stmt 1
+ 2745 055c 10301BE5 		ldr	r3, [fp, #-16]
+ 2746 0560 803003E2 		and	r3, r3, #128
+ 2747 0564 000053E3 		cmp	r3, #0
+ 2748 0568 0100001A 		bne	.L42
+ 2749              		.loc 1 164 0 is_stmt 0 discriminator 1
+ 2750 056c 0230A0E3 		mov	r3, #2
+ 2751 0570 000000EA 		b	.L41
+ 2752              	.L42:
+ 165:../button.c   ****     return 0;
+ 2753              		.loc 1 165 0 is_stmt 1
+ 2754 0574 0030A0E3 		mov	r3, #0
+ 2755              	.L41:
+ 166:../button.c   **** }
+ 2756              		.loc 1 166 0
+ 2757 0578 0300A0E1 		mov	r0, r3
+ 2758 057c 0CD04BE2 		sub	sp, fp, #12
+ 2759 0580 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2760 0584 1EFF2FE1 		bx	lr
+ 2761              	.L44:
+ 2762              		.align	2
+ 2763              	.L43:
+ 2764 0588 4400D201 		.word	30539844
+ 2765              		.cfi_endproc
+ 2766              	.LFE4:
+ 2768              		.align	2
+ 2770              	lectura_doble_estable:
+ 2771              	.LFB5:
+ 167:../button.c   **** 
+ 168:../button.c   **** /* Comprueba dos veces seguidas el estado del pulsador y solo acepta el valor
+ 169:../button.c   ****  * si ambas lecturas coinciden */
+ 170:../button.c   **** static uint8_t lectura_doble_estable(uint8_t esperado)
+ 171:../button.c   **** {
+ 2772              		.loc 1 171 0
+ 2773              		.cfi_startproc
+ 2774              		@ Function supports interworking.
+ 2775              		@ args = 0, pretend = 0, frame = 16
+ 2776              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2777 058c 0DC0A0E1 		mov	ip, sp
+ 2778              	.LCFI10:
+ 2779              		.cfi_def_cfa_register 12
+ 2780 0590 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2781 0594 04B04CE2 		sub	fp, ip, #4
+ 2782              		.cfi_offset 14, -8
+ 2783              		.cfi_offset 13, -12
+ 2784              		.cfi_offset 11, -16
+ 2785              	.LCFI11:
+ 2786              		.cfi_def_cfa 11, 4
+ 2787 0598 10D04DE2 		sub	sp, sp, #16
+ 2788 059c 0030A0E1 		mov	r3, r0
+ 2789 05a0 15304BE5 		strb	r3, [fp, #-21]
+ 172:../button.c   ****     uint8_t a = leer_botones();
+ 2790              		.loc 1 172 0
+ 2791 05a4 DFFFFFEB 		bl	leer_botones
+ 2792 05a8 0030A0E1 		mov	r3, r0
+ 2793 05ac 0D304BE5 		strb	r3, [fp, #-13]
+ 173:../button.c   ****     volatile int i;
+ 174:../button.c   ****     for (i = 0; i < 120; ++i) { __asm__ __volatile__(""); }
+ 2794              		.loc 1 174 0
+ 2795 05b0 0030A0E3 		mov	r3, #0
+ 2796 05b4 14300BE5 		str	r3, [fp, #-20]
+ 2797 05b8 020000EA 		b	.L46
+ 2798              	.L47:
+ 2799              		.loc 1 174 0 is_stmt 0 discriminator 2
+ 2800 05bc 14301BE5 		ldr	r3, [fp, #-20]
+ 2801 05c0 013083E2 		add	r3, r3, #1
+ 2802 05c4 14300BE5 		str	r3, [fp, #-20]
+ 2803              	.L46:
+ 2804              		.loc 1 174 0 discriminator 1
+ 2805 05c8 14301BE5 		ldr	r3, [fp, #-20]
+ 2806 05cc 770053E3 		cmp	r3, #119
+ 2807 05d0 F9FFFFDA 		ble	.L47
+ 175:../button.c   ****     uint8_t b = leer_botones();
+ 2808              		.loc 1 175 0 is_stmt 1
+ 2809 05d4 D3FFFFEB 		bl	leer_botones
+ 2810 05d8 0030A0E1 		mov	r3, r0
+ 2811 05dc 0E304BE5 		strb	r3, [fp, #-14]
+ 176:../button.c   ****     return (a == esperado) && (b == esperado);
+ 2812              		.loc 1 176 0
+ 2813 05e0 0D205BE5 		ldrb	r2, [fp, #-13]	@ zero_extendqisi2
+ 2814 05e4 15305BE5 		ldrb	r3, [fp, #-21]	@ zero_extendqisi2
+ 2815 05e8 030052E1 		cmp	r2, r3
+ 2816 05ec 0500001A 		bne	.L48
+ 2817              		.loc 1 176 0 is_stmt 0 discriminator 1
+ 2818 05f0 0E205BE5 		ldrb	r2, [fp, #-14]	@ zero_extendqisi2
+ 2819 05f4 15305BE5 		ldrb	r3, [fp, #-21]	@ zero_extendqisi2
+ 2820 05f8 030052E1 		cmp	r2, r3
+ 2821 05fc 0100001A 		bne	.L48
+ 2822 0600 0130A0E3 		mov	r3, #1
+ 2823 0604 000000EA 		b	.L49
+ 2824              	.L48:
+ 2825              		.loc 1 176 0 discriminator 2
+ 2826 0608 0030A0E3 		mov	r3, #0
+ 2827              	.L49:
+ 2828              		.loc 1 176 0 discriminator 3
+ 2829 060c FF3003E2 		and	r3, r3, #255
+ 177:../button.c   **** }
+ 2830              		.loc 1 177 0 is_stmt 1 discriminator 3
+ 2831 0610 0300A0E1 		mov	r0, r3
+ 2832 0614 0CD04BE2 		sub	sp, fp, #12
+ 2833 0618 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2834 061c 1EFF2FE1 		bx	lr
+ 2835              		.cfi_endproc
+ 2836              	.LFE5:
+ 2838              		.align	2
+ 2839              		.global	Eint4567_init
+ 2841              	Eint4567_init:
+ 2842              	.LFB6:
+ 178:../button.c   **** 
+ 179:../button.c   **** /* Inicialización */
+ 180:../button.c   **** void Eint4567_init(void)
+ 181:../button.c   **** {
+ 2843              		.loc 1 181 0
+ 2844              		.cfi_startproc
+ 2845              		@ Function supports interworking.
+ 2846              		@ args = 0, pretend = 0, frame = 0
+ 2847              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2848 0620 0DC0A0E1 		mov	ip, sp
+ 2849              	.LCFI12:
+ 2850              		.cfi_def_cfa_register 12
+ 2851 0624 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2852 0628 04B04CE2 		sub	fp, ip, #4
+ 2853              		.cfi_offset 14, -8
+ 2854              		.cfi_offset 13, -12
+ 2855              		.cfi_offset 11, -16
+ 2856              	.LCFI13:
+ 2857              		.cfi_def_cfa 11, 4
+ 182:../button.c   ****     rI_ISPC     |= BIT_EINT4567;
+ 2858              		.loc 1 182 0
+ 2859 062c EC309FE5 		ldr	r3, .L51
+ 2860 0630 E8209FE5 		ldr	r2, .L51
+ 2861 0634 002092E5 		ldr	r2, [r2, #0]
+ 2862 0638 022682E3 		orr	r2, r2, #2097152
+ 2863 063c 002083E5 		str	r2, [r3, #0]
+ 183:../button.c   ****     rEXTINTPND   = (1u << 2) | (1u << 3);
+ 2864              		.loc 1 183 0
+ 2865 0640 DC309FE5 		ldr	r3, .L51+4
+ 2866 0644 0C20A0E3 		mov	r2, #12
+ 2867 0648 002083E5 		str	r2, [r3, #0]
+ 184:../button.c   **** 
+ 185:../button.c   ****     pISR_EINT4567 = (unsigned)Eint4567_ISR;
+ 2868              		.loc 1 185 0
+ 2869 064c D4309FE5 		ldr	r3, .L51+8
+ 2870 0650 D4209FE5 		ldr	r2, .L51+12
+ 2871 0654 002083E5 		str	r2, [r3, #0]
+ 186:../button.c   **** 
+ 187:../button.c   ****     rPCONG |= 0xFF00;
+ 2872              		.loc 1 187 0
+ 2873 0658 D0309FE5 		ldr	r3, .L51+16
+ 2874 065c CC209FE5 		ldr	r2, .L51+16
+ 2875 0660 002092E5 		ldr	r2, [r2, #0]
+ 2876 0664 FF2C82E3 		orr	r2, r2, #65280
+ 2877 0668 002083E5 		str	r2, [r3, #0]
+ 188:../button.c   ****     rPUPG  = 0x0;
+ 2878              		.loc 1 188 0
+ 2879 066c C0309FE5 		ldr	r3, .L51+20
+ 2880 0670 0020A0E3 		mov	r2, #0
+ 2881 0674 002083E5 		str	r2, [r3, #0]
+ 189:../button.c   ****     rEXTINT = (rEXTINT & ~(0x7FFF << 16)) | (0x2AAA << 16);
+ 2882              		.loc 1 189 0
+ 2883 0678 B8209FE5 		ldr	r2, .L51+24
+ 2884 067c B4309FE5 		ldr	r3, .L51+24
+ 2885 0680 003093E5 		ldr	r3, [r3, #0]
+ 2886 0684 7F34C3E3 		bic	r3, r3, #2130706432
+ 2887 0688 FF38C3E3 		bic	r3, r3, #16711680
+ 2888 068c AA3583E3 		orr	r3, r3, #713031680
+ 2889 0690 2A3883E3 		orr	r3, r3, #2752512
+ 2890 0694 003082E5 		str	r3, [r2, #0]
+ 190:../button.c   **** 
+ 191:../button.c   ****     rINTMSK &= ~(BIT_EINT4567);
+ 2891              		.loc 1 191 0
+ 2892 0698 9C309FE5 		ldr	r3, .L51+28
+ 2893 069c 98209FE5 		ldr	r2, .L51+28
+ 2894 06a0 002092E5 		ldr	r2, [r2, #0]
+ 2895 06a4 0226C2E3 		bic	r2, r2, #2097152
+ 2896 06a8 002083E5 		str	r2, [r3, #0]
+ 192:../button.c   **** 
+ 193:../button.c   ****     rEXTINTPND = (1u << 2) | (1u << 3);
+ 2897              		.loc 1 193 0
+ 2898 06ac 70309FE5 		ldr	r3, .L51+4
+ 2899 06b0 0C20A0E3 		mov	r2, #12
+ 2900 06b4 002083E5 		str	r2, [r3, #0]
+ 194:../button.c   ****     rI_ISPC   |= BIT_EINT4567;
+ 2901              		.loc 1 194 0
+ 2902 06b8 60309FE5 		ldr	r3, .L51
+ 2903 06bc 5C209FE5 		ldr	r2, .L51
+ 2904 06c0 002092E5 		ldr	r2, [r2, #0]
+ 2905 06c4 022682E3 		orr	r2, r2, #2097152
+ 2906 06c8 002083E5 		str	r2, [r3, #0]
+ 195:../button.c   **** 
+ 196:../button.c   ****     estado = BOTON_ESPERA;
+ 2907              		.loc 1 196 0
+ 2908 06cc 6C309FE5 		ldr	r3, .L51+32
+ 2909 06d0 0020A0E3 		mov	r2, #0
+ 2910 06d4 0020C3E5 		strb	r2, [r3, #0]
+ 197:../button.c   ****     ultimo_boton = 0;
+ 2911              		.loc 1 197 0
+ 2912 06d8 64309FE5 		ldr	r3, .L51+36
+ 2913 06dc 0020A0E3 		mov	r2, #0
+ 2914 06e0 0020C3E5 		strb	r2, [r3, #0]
+ 198:../button.c   ****     last_click = 0;
+ 2915              		.loc 1 198 0
+ 2916 06e4 5C309FE5 		ldr	r3, .L51+40
+ 2917 06e8 0020A0E3 		mov	r2, #0
+ 2918 06ec 0020C3E5 		strb	r2, [r3, #0]
+ 199:../button.c   ****     boton_repetido = 0;
+ 2919              		.loc 1 199 0
+ 2920 06f0 54309FE5 		ldr	r3, .L51+44
+ 2921 06f4 0020A0E3 		mov	r2, #0
+ 2922 06f8 0020C3E5 		strb	r2, [r3, #0]
+ 200:../button.c   ****     repeticiones_generadas = 0;
+ 2923              		.loc 1 200 0
+ 2924 06fc 4C309FE5 		ldr	r3, .L51+48
+ 2925 0700 0020A0E3 		mov	r2, #0
+ 2926 0704 0020C3E5 		strb	r2, [r3, #0]
+ 201:../button.c   ****     incrementos = 0;
+ 2927              		.loc 1 201 0
+ 2928 0708 44309FE5 		ldr	r3, .L51+52
+ 2929 070c 0020A0E3 		mov	r2, #0
+ 2930 0710 0020C3E5 		strb	r2, [r3, #0]
+ 202:../button.c   **** }
+ 2931              		.loc 1 202 0
+ 2932 0714 0CD04BE2 		sub	sp, fp, #12
+ 2933 0718 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2934 071c 1EFF2FE1 		bx	lr
+ 2935              	.L52:
+ 2936              		.align	2
+ 2937              	.L51:
+ 2938 0720 2400E001 		.word	31457316
+ 2939 0724 5400D201 		.word	30539860
+ 2940 0728 74FF7F0C 		.word	209715060
+ 2941 072c 00000000 		.word	Eint4567_ISR
+ 2942 0730 4000D201 		.word	30539840
+ 2943 0734 4800D201 		.word	30539848
+ 2944 0738 5000D201 		.word	30539856
+ 2945 073c 0C00E001 		.word	31457292
+ 2946 0740 00000000 		.word	estado
+ 2947 0744 01000000 		.word	ultimo_boton
+ 2948 0748 02000000 		.word	last_click
+ 2949 074c 03000000 		.word	boton_repetido
+ 2950 0750 04000000 		.word	repeticiones_generadas
+ 2951 0754 0C000000 		.word	incrementos
+ 2952              		.cfi_endproc
+ 2953              	.LFE6:
+ 2955              	.Letext0:
+DEFINED SYMBOLS
+                            *ABS*:00000000 button.c
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2167   .bss:00000000 estado
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2168   .bss:00000000 $d
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2169   .bss:00000001 ultimo_boton
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2171   .bss:00000002 last_click
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2173   .bss:00000003 boton_repetido
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2175   .bss:00000004 repeticiones_generadas
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2178   .bss:00000008 rep_next
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2180   .bss:0000000c incrementos
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2183   .text:00000000 $a
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2186   .text:00000000 Eint4567_ISR
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2303   .text:00000124 $d
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2312   .text:0000013c $a
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2315   .text:0000013c button_gestion_timer
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2770   .text:0000058c lectura_doble_estable
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2713   .text:00000528 leer_botones
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2603   .text:00000468 $d
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2615   .text:0000048c $a
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2618   .text:0000048c button_recibir_click
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2654   .text:000004c8 $d
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2658   .text:000004cc $a
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2661   .text:000004cc button_recibir_incremento
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2707   .text:00000524 $d
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2711   .text:00000528 $a
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2764   .text:00000588 $d
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2768   .text:0000058c $a
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2841   .text:00000620 Eint4567_init
+C:\Users\jorge\AppData\Local\Temp\cc0IsAgh.s:2938   .text:00000720 $d
+                     .debug_frame:00000010 $d
+
+UNDEFINED SYMBOLS
+timer2_count
+cola_depuracion
+timer3_start

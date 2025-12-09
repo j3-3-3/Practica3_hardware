@@ -1,0 +1,214 @@
+   1              		.cpu arm7tdmi
+   2              		.fpu softvfp
+   3              		.eabi_attribute 20, 1
+   4              		.eabi_attribute 21, 1
+   5              		.eabi_attribute 23, 3
+   6              		.eabi_attribute 24, 1
+   7              		.eabi_attribute 25, 1
+   8              		.eabi_attribute 26, 1
+   9              		.eabi_attribute 30, 6
+  10              		.eabi_attribute 18, 4
+  11              		.file	"cola.c"
+  21              	.Ltext0:
+  22              		.file 1 "../cola.c"
+ 1228              		.align	4
+ 1229              	cola:
+ 1230 0000 00000000 		.space	1024
+ 1230      00000000 
+ 1230      00000000 
+ 1230      00000000 
+ 1230      00000000 
+ 1231              		.align	2
+ 1232              	indice:
+ 1233 0400 00000000 		.space	4
+ 1234 0404 00000000 		.text
+ 1234      00000000 
+ 1234      00000000 
+ 1235              		.align	2
+ 1236              		.global	cola_depuracion
+ 1238              	cola_depuracion:
+ 1239              	.LFB0:
+   1:../cola.c     **** // Fichero:	cola.c
+   2:../cola.c     **** 
+   3:../cola.c     **** #include "cola.h"
+   4:../cola.c     **** 
+   5:../cola.c     **** /* Cola circular de depuración, alineada a 16 bytes */
+   6:../cola.c     **** static EventoDebug cola[COLA_TAM] __attribute__((aligned(16)));
+   7:../cola.c     **** 
+   8:../cola.c     **** /* Índice de inserción */
+   9:../cola.c     **** static volatile uint32_t indice = 0;
+  10:../cola.c     **** 
+  11:../cola.c     **** /* Inserta un nuevo evento en la cola */
+  12:../cola.c     **** void cola_depuracion(uint32_t instant, uint8_t ID_evento, uint32_t auxData)
+  13:../cola.c     **** {
+ 1240              		.loc 1 13 0
+ 1241              		.cfi_startproc
+ 1242              		@ Function supports interworking.
+ 1243              		@ args = 0, pretend = 0, frame = 16
+ 1244              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1245 0000 0DC0A0E1 		mov	ip, sp
+ 1246              	.LCFI0:
+ 1247              		.cfi_def_cfa_register 12
+ 1248 0004 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1249 0008 04B04CE2 		sub	fp, ip, #4
+ 1250              		.cfi_offset 14, -8
+ 1251              		.cfi_offset 13, -12
+ 1252              		.cfi_offset 11, -16
+ 1253              	.LCFI1:
+ 1254              		.cfi_def_cfa 11, 4
+ 1255 000c 10D04DE2 		sub	sp, sp, #16
+ 1256 0010 10000BE5 		str	r0, [fp, #-16]
+ 1257 0014 0130A0E1 		mov	r3, r1
+ 1258 0018 18200BE5 		str	r2, [fp, #-24]
+ 1259 001c 11304BE5 		strb	r3, [fp, #-17]
+  14:../cola.c     ****     cola[indice].instant = instant;
+ 1260              		.loc 1 14 0
+ 1261 0020 90309FE5 		ldr	r3, .L3
+ 1262 0024 002093E5 		ldr	r2, [r3, #0]
+ 1263 0028 8C309FE5 		ldr	r3, .L3+4
+ 1264 002c 10101BE5 		ldr	r1, [fp, #-16]
+ 1265 0030 021283E7 		str	r1, [r3, r2, asl #4]
+  15:../cola.c     ****     cola[indice].ID_evento = ID_evento;
+ 1266              		.loc 1 15 0
+ 1267 0034 7C309FE5 		ldr	r3, .L3
+ 1268 0038 002093E5 		ldr	r2, [r3, #0]
+ 1269 003c 78109FE5 		ldr	r1, .L3+4
+ 1270 0040 0430A0E3 		mov	r3, #4
+ 1271 0044 0222A0E1 		mov	r2, r2, asl #4
+ 1272 0048 022081E0 		add	r2, r1, r2
+ 1273 004c 033082E0 		add	r3, r2, r3
+ 1274 0050 11205BE5 		ldrb	r2, [fp, #-17]
+ 1275 0054 0020C3E5 		strb	r2, [r3, #0]
+  16:../cola.c     ****     cola[indice].auxData = auxData;
+ 1276              		.loc 1 16 0
+ 1277 0058 58309FE5 		ldr	r3, .L3
+ 1278 005c 002093E5 		ldr	r2, [r3, #0]
+ 1279 0060 54109FE5 		ldr	r1, .L3+4
+ 1280 0064 0830A0E3 		mov	r3, #8
+ 1281 0068 0222A0E1 		mov	r2, r2, asl #4
+ 1282 006c 022081E0 		add	r2, r1, r2
+ 1283 0070 033082E0 		add	r3, r2, r3
+ 1284 0074 18201BE5 		ldr	r2, [fp, #-24]
+ 1285 0078 002083E5 		str	r2, [r3, #0]
+  17:../cola.c     **** 
+  18:../cola.c     ****     /* Avance circular del índice */
+  19:../cola.c     ****     indice++;
+ 1286              		.loc 1 19 0
+ 1287 007c 34309FE5 		ldr	r3, .L3
+ 1288 0080 003093E5 		ldr	r3, [r3, #0]
+ 1289 0084 012083E2 		add	r2, r3, #1
+ 1290 0088 28309FE5 		ldr	r3, .L3
+ 1291 008c 002083E5 		str	r2, [r3, #0]
+  20:../cola.c     ****     if (indice >= COLA_TAM)
+ 1292              		.loc 1 20 0
+ 1293 0090 20309FE5 		ldr	r3, .L3
+ 1294 0094 003093E5 		ldr	r3, [r3, #0]
+ 1295 0098 3F0053E3 		cmp	r3, #63
+ 1296 009c 0200009A 		bls	.L1
+  21:../cola.c     ****         indice = 0;
+ 1297              		.loc 1 21 0
+ 1298 00a0 10309FE5 		ldr	r3, .L3
+ 1299 00a4 0020A0E3 		mov	r2, #0
+ 1300 00a8 002083E5 		str	r2, [r3, #0]
+ 1301              	.L1:
+  22:../cola.c     **** }
+ 1302              		.loc 1 22 0
+ 1303 00ac 0CD04BE2 		sub	sp, fp, #12
+ 1304 00b0 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1305 00b4 1EFF2FE1 		bx	lr
+ 1306              	.L4:
+ 1307              		.align	2
+ 1308              	.L3:
+ 1309 00b8 00040000 		.word	indice
+ 1310 00bc 00000000 		.word	cola
+ 1311              		.cfi_endproc
+ 1312              	.LFE0:
+ 1314              		.align	2
+ 1315              		.global	cola_get_base
+ 1317              	cola_get_base:
+ 1318              	.LFB1:
+  23:../cola.c     **** 
+  24:../cola.c     **** /* Devuelve base de la cola */
+  25:../cola.c     **** EventoDebug* cola_get_base(void)
+  26:../cola.c     **** {
+ 1319              		.loc 1 26 0
+ 1320              		.cfi_startproc
+ 1321              		@ Function supports interworking.
+ 1322              		@ args = 0, pretend = 0, frame = 0
+ 1323              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1324 00c0 0DC0A0E1 		mov	ip, sp
+ 1325              	.LCFI2:
+ 1326              		.cfi_def_cfa_register 12
+ 1327 00c4 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1328 00c8 04B04CE2 		sub	fp, ip, #4
+ 1329              		.cfi_offset 14, -8
+ 1330              		.cfi_offset 13, -12
+ 1331              		.cfi_offset 11, -16
+ 1332              	.LCFI3:
+ 1333              		.cfi_def_cfa 11, 4
+  27:../cola.c     ****     return cola;
+ 1334              		.loc 1 27 0
+ 1335 00cc 0C309FE5 		ldr	r3, .L6
+  28:../cola.c     **** }
+ 1336              		.loc 1 28 0
+ 1337 00d0 0300A0E1 		mov	r0, r3
+ 1338 00d4 0CD04BE2 		sub	sp, fp, #12
+ 1339 00d8 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1340 00dc 1EFF2FE1 		bx	lr
+ 1341              	.L7:
+ 1342              		.align	2
+ 1343              	.L6:
+ 1344 00e0 00000000 		.word	cola
+ 1345              		.cfi_endproc
+ 1346              	.LFE1:
+ 1348              		.align	2
+ 1349              		.global	cola_get_tam
+ 1351              	cola_get_tam:
+ 1352              	.LFB2:
+  29:../cola.c     **** 
+  30:../cola.c     **** /* Devuelve tamaño máximo de la cola */
+  31:../cola.c     **** uint32_t cola_get_tam(void)
+  32:../cola.c     **** {
+ 1353              		.loc 1 32 0
+ 1354              		.cfi_startproc
+ 1355              		@ Function supports interworking.
+ 1356              		@ args = 0, pretend = 0, frame = 0
+ 1357              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1358 00e4 0DC0A0E1 		mov	ip, sp
+ 1359              	.LCFI4:
+ 1360              		.cfi_def_cfa_register 12
+ 1361 00e8 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1362 00ec 04B04CE2 		sub	fp, ip, #4
+ 1363              		.cfi_offset 14, -8
+ 1364              		.cfi_offset 13, -12
+ 1365              		.cfi_offset 11, -16
+ 1366              	.LCFI5:
+ 1367              		.cfi_def_cfa 11, 4
+  33:../cola.c     ****     return COLA_TAM;
+ 1368              		.loc 1 33 0
+ 1369 00f0 4030A0E3 		mov	r3, #64
+  34:../cola.c     **** }
+ 1370              		.loc 1 34 0
+ 1371 00f4 0300A0E1 		mov	r0, r3
+ 1372 00f8 0CD04BE2 		sub	sp, fp, #12
+ 1373 00fc 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1374 0100 1EFF2FE1 		bx	lr
+ 1375              		.cfi_endproc
+ 1376              	.LFE2:
+ 1378              	.Letext0:
+DEFINED SYMBOLS
+                            *ABS*:00000000 cola.c
+C:\Users\jorge\AppData\Local\Temp\ccGWuYfS.s:1228   .bss:00000000 $d
+C:\Users\jorge\AppData\Local\Temp\ccGWuYfS.s:1229   .bss:00000000 cola
+C:\Users\jorge\AppData\Local\Temp\ccGWuYfS.s:1232   .bss:00000400 indice
+C:\Users\jorge\AppData\Local\Temp\ccGWuYfS.s:1235   .text:00000000 $a
+C:\Users\jorge\AppData\Local\Temp\ccGWuYfS.s:1238   .text:00000000 cola_depuracion
+C:\Users\jorge\AppData\Local\Temp\ccGWuYfS.s:1309   .text:000000b8 $d
+C:\Users\jorge\AppData\Local\Temp\ccGWuYfS.s:1314   .text:000000c0 $a
+C:\Users\jorge\AppData\Local\Temp\ccGWuYfS.s:1317   .text:000000c0 cola_get_base
+C:\Users\jorge\AppData\Local\Temp\ccGWuYfS.s:1344   .text:000000e0 $d
+C:\Users\jorge\AppData\Local\Temp\ccGWuYfS.s:1348   .text:000000e4 $a
+C:\Users\jorge\AppData\Local\Temp\ccGWuYfS.s:1351   .text:000000e4 cola_get_tam
+                     .debug_frame:00000010 $d
+
+NO UNDEFINED SYMBOLS

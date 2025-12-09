@@ -1,0 +1,1886 @@
+   1              		.cpu arm7tdmi
+   2              		.fpu softvfp
+   3              		.eabi_attribute 20, 1
+   4              		.eabi_attribute 21, 1
+   5              		.eabi_attribute 23, 3
+   6              		.eabi_attribute 24, 1
+   7              		.eabi_attribute 25, 1
+   8              		.eabi_attribute 26, 1
+   9              		.eabi_attribute 30, 6
+  10              		.eabi_attribute 18, 4
+  11              		.file	"measures.c"
+  21              	.Ltext0:
+  22              		.file 1 "../measures.c"
+ 1308              		.align	3
+ 1309              	g_medidas:
+ 1310 0000 00000000 		.space	1280
+ 1310      00000000 
+ 1310      00000000 
+ 1310      00000000 
+ 1310      00000000 
+ 1311              		.align	2
+ 1312              	g_medidas_count:
+ 1313 0500 00000000 		.space	4
+ 1314              		.global	g_isr_button_count
+ 1315              		.align	2
+ 1318              	g_isr_button_count:
+ 1319 0504 00000000 		.space	4
+ 1320              		.global	g_isr_button_accum_us
+ 1321              		.align	2
+ 1324              	g_isr_button_accum_us:
+ 1325 0508 00000000 		.space	4
+ 1326              		.global	g_isr_button_last_t0
+ 1327              		.align	2
+ 1330              	g_isr_button_last_t0:
+ 1331 050c 00000000 		.space	4
+ 1332              		.global	g_isr_button_avg_us
+ 1333              		.align	2
+ 1336              	g_isr_button_avg_us:
+ 1337 0510 00000000 		.space	4
+ 1338              		.global	g_isr_timer3_count
+ 1339              		.align	2
+ 1342              	g_isr_timer3_count:
+ 1343 0514 00000000 		.space	4
+ 1344              		.global	g_isr_timer3_accum_us
+ 1345              		.align	2
+ 1348              	g_isr_timer3_accum_us:
+ 1349 0518 00000000 		.space	4
+ 1350              		.global	g_isr_timer3_last_t0
+ 1351              		.align	2
+ 1354              	g_isr_timer3_last_t0:
+ 1355 051c 00000000 		.space	4
+ 1356              		.global	g_isr_timer3_avg_us
+ 1357              		.align	2
+ 1360              	g_isr_timer3_avg_us:
+ 1361 0520 00000000 		.space	4
+ 1362              		.text
+ 1363              		.align	2
+ 1364              		.global	measure_isr_button_begin
+ 1366              	measure_isr_button_begin:
+ 1367              	.LFB3:
+   1:../measures.c **** /*
+   2:../measures.c ****  * measures.c (versión sin dependencia de libm y con medición opcional de rebote)
+   3:../measures.c ****  *
+   4:../measures.c ****  * Para activar medición de button_gestion_timer_rebote:
+   5:../measures.c ****  *   - Define TIMER3_EXPIRED_AVAILABLE (descomenta #define más abajo)
+   6:../measures.c ****  *   - Asegúrate de que en timer3.c exista: volatile uint8_t timer3_expired = 0;
+   7:../measures.c ****  *   - Y en button.h: extern volatile uint8_t timer3_expired;
+   8:../measures.c ****  */
+   9:../measures.c **** 
+  10:../measures.c **** /* #define TIMER3_EXPIRED_AVAILABLE */  /* Descomenta si tienes timer3_expired global */
+  11:../measures.c **** 
+  12:../measures.c **** #include <stdint.h>
+  13:../measures.c **** /* Sin <math.h>; implementamos sqrt_entero simple si queremos SD */
+  14:../measures.c **** #include "timer2.h"
+  15:../measures.c **** #include "sudoku_adapter.h"
+  16:../measures.c **** #include "sudoku_core.h"
+  17:../measures.c **** #include "sudoku_fsm.h"
+  18:../measures.c **** #include "button.h"
+  19:../measures.c **** 
+  20:../measures.c **** /* -------- Configuración de repeticiones y mediciones -------- */
+  21:../measures.c **** #define REP_RECALC_ALL            10
+  22:../measures.c **** #define REP_SET_VALUE             200
+  23:../measures.c **** #define REP_PROPAGATE_VALUE       50
+  24:../measures.c **** #define REP_TICK_IDLE             1000
+  25:../measures.c **** #define REP_TICK_CLICK            50
+  26:../measures.c **** #define REP_TICK_INC              50
+  27:../measures.c **** #define REP_BUTTON_GESTION_IDLE   1000
+  28:../measures.c **** #define REP_BUTTON_GESTION_REBOTE 30
+  29:../measures.c **** 
+  30:../measures.c **** #define NMED_DEFAULT              40
+  31:../measures.c **** #define NMED_TICK_IDLE            30
+  32:../measures.c **** 
+  33:../measures.c **** /* -------- Estructura de resultado -------- */
+  34:../measures.c **** typedef struct {
+  35:../measures.c ****     char     name[32];
+  36:../measures.c ****     unsigned rep;
+  37:../measures.c ****     unsigned nmed;
+  38:../measures.c ****     unsigned min_us;
+  39:../measures.c ****     unsigned max_us;
+  40:../measures.c ****     double   mean_block_us;
+  41:../measures.c ****     double   sd_block_us;
+  42:../measures.c ****     double   us_per_call;
+  43:../measures.c ****     double   cycles_per_call;
+  44:../measures.c **** } medida_t;
+  45:../measures.c **** 
+  46:../measures.c **** #define MAX_MEDIDAS 16
+  47:../measures.c **** static medida_t g_medidas[MAX_MEDIDAS];
+  48:../measures.c **** static unsigned g_medidas_count = 0;
+  49:../measures.c **** 
+  50:../measures.c **** /* -------- Hooks ISR (Opcionales) -------- */
+  51:../measures.c **** volatile unsigned g_isr_button_count    = 0;
+  52:../measures.c **** volatile unsigned g_isr_button_accum_us = 0;
+  53:../measures.c **** volatile unsigned g_isr_button_last_t0  = 0;
+  54:../measures.c **** volatile unsigned g_isr_button_avg_us   = 0;
+  55:../measures.c **** 
+  56:../measures.c **** volatile unsigned g_isr_timer3_count    = 0;
+  57:../measures.c **** volatile unsigned g_isr_timer3_accum_us = 0;
+  58:../measures.c **** volatile unsigned g_isr_timer3_last_t0  = 0;
+  59:../measures.c **** volatile unsigned g_isr_timer3_avg_us   = 0;
+  60:../measures.c **** 
+  61:../measures.c **** void measure_isr_button_begin(void) {
+ 1368              		.loc 1 61 0
+ 1369              		.cfi_startproc
+ 1370              		@ Function supports interworking.
+ 1371              		@ args = 0, pretend = 0, frame = 0
+ 1372              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1373 0000 0DC0A0E1 		mov	ip, sp
+ 1374              	.LCFI0:
+ 1375              		.cfi_def_cfa_register 12
+ 1376 0004 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1377 0008 04B04CE2 		sub	fp, ip, #4
+ 1378              		.cfi_offset 14, -8
+ 1379              		.cfi_offset 13, -12
+ 1380              		.cfi_offset 11, -16
+ 1381              	.LCFI1:
+ 1382              		.cfi_def_cfa 11, 4
+  62:../measures.c ****     g_isr_button_last_t0 = timer2_count();
+ 1383              		.loc 1 62 0
+ 1384 000c FEFFFFEB 		bl	timer2_count
+ 1385 0010 0020A0E1 		mov	r2, r0
+ 1386 0014 0C309FE5 		ldr	r3, .L2
+ 1387 0018 002083E5 		str	r2, [r3, #0]
+  63:../measures.c **** }
+ 1388              		.loc 1 63 0
+ 1389 001c 0CD04BE2 		sub	sp, fp, #12
+ 1390 0020 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1391 0024 1EFF2FE1 		bx	lr
+ 1392              	.L3:
+ 1393              		.align	2
+ 1394              	.L2:
+ 1395 0028 00000000 		.word	g_isr_button_last_t0
+ 1396              		.cfi_endproc
+ 1397              	.LFE3:
+ 1399              		.global	__aeabi_uidiv
+ 1400              		.align	2
+ 1401              		.global	measure_isr_button_end
+ 1403              	measure_isr_button_end:
+ 1404              	.LFB4:
+  64:../measures.c **** void measure_isr_button_end(void) {
+ 1405              		.loc 1 64 0
+ 1406              		.cfi_startproc
+ 1407              		@ Function supports interworking.
+ 1408              		@ args = 0, pretend = 0, frame = 8
+ 1409              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1410 002c 0DC0A0E1 		mov	ip, sp
+ 1411              	.LCFI2:
+ 1412              		.cfi_def_cfa_register 12
+ 1413 0030 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1414 0034 04B04CE2 		sub	fp, ip, #4
+ 1415              		.cfi_offset 14, -8
+ 1416              		.cfi_offset 13, -12
+ 1417              		.cfi_offset 11, -16
+ 1418              	.LCFI3:
+ 1419              		.cfi_def_cfa 11, 4
+ 1420 0038 08D04DE2 		sub	sp, sp, #8
+  65:../measures.c ****     unsigned t1;
+  66:../measures.c ****     t1 = timer2_count();
+ 1421              		.loc 1 66 0
+ 1422 003c FEFFFFEB 		bl	timer2_count
+ 1423 0040 10000BE5 		str	r0, [fp, #-16]
+  67:../measures.c ****     if (t1 > g_isr_button_last_t0) {
+ 1424              		.loc 1 67 0
+ 1425 0044 7C309FE5 		ldr	r3, .L6
+ 1426 0048 003093E5 		ldr	r3, [r3, #0]
+ 1427 004c 10201BE5 		ldr	r2, [fp, #-16]
+ 1428 0050 030052E1 		cmp	r2, r3
+ 1429 0054 1800009A 		bls	.L4
+  68:../measures.c ****         g_isr_button_accum_us += (t1 - g_isr_button_last_t0);
+ 1430              		.loc 1 68 0
+ 1431 0058 68309FE5 		ldr	r3, .L6
+ 1432 005c 003093E5 		ldr	r3, [r3, #0]
+ 1433 0060 10201BE5 		ldr	r2, [fp, #-16]
+ 1434 0064 022063E0 		rsb	r2, r3, r2
+ 1435 0068 5C309FE5 		ldr	r3, .L6+4
+ 1436 006c 003093E5 		ldr	r3, [r3, #0]
+ 1437 0070 032082E0 		add	r2, r2, r3
+ 1438 0074 50309FE5 		ldr	r3, .L6+4
+ 1439 0078 002083E5 		str	r2, [r3, #0]
+  69:../measures.c ****         g_isr_button_count++;
+ 1440              		.loc 1 69 0
+ 1441 007c 4C309FE5 		ldr	r3, .L6+8
+ 1442 0080 003093E5 		ldr	r3, [r3, #0]
+ 1443 0084 012083E2 		add	r2, r3, #1
+ 1444 0088 40309FE5 		ldr	r3, .L6+8
+ 1445 008c 002083E5 		str	r2, [r3, #0]
+  70:../measures.c ****         g_isr_button_avg_us = g_isr_button_accum_us / g_isr_button_count;
+ 1446              		.loc 1 70 0
+ 1447 0090 34309FE5 		ldr	r3, .L6+4
+ 1448 0094 002093E5 		ldr	r2, [r3, #0]
+ 1449 0098 30309FE5 		ldr	r3, .L6+8
+ 1450 009c 003093E5 		ldr	r3, [r3, #0]
+ 1451 00a0 0200A0E1 		mov	r0, r2
+ 1452 00a4 0310A0E1 		mov	r1, r3
+ 1453 00a8 FEFFFFEB 		bl	__aeabi_uidiv
+ 1454 00ac 0030A0E1 		mov	r3, r0
+ 1455 00b0 0320A0E1 		mov	r2, r3
+ 1456 00b4 18309FE5 		ldr	r3, .L6+12
+ 1457 00b8 002083E5 		str	r2, [r3, #0]
+ 1458              	.L4:
+  71:../measures.c ****     }
+  72:../measures.c **** }
+ 1459              		.loc 1 72 0
+ 1460 00bc 0CD04BE2 		sub	sp, fp, #12
+ 1461 00c0 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1462 00c4 1EFF2FE1 		bx	lr
+ 1463              	.L7:
+ 1464              		.align	2
+ 1465              	.L6:
+ 1466 00c8 00000000 		.word	g_isr_button_last_t0
+ 1467 00cc 00000000 		.word	g_isr_button_accum_us
+ 1468 00d0 00000000 		.word	g_isr_button_count
+ 1469 00d4 00000000 		.word	g_isr_button_avg_us
+ 1470              		.cfi_endproc
+ 1471              	.LFE4:
+ 1473              		.align	2
+ 1474              		.global	measure_isr_timer3_begin
+ 1476              	measure_isr_timer3_begin:
+ 1477              	.LFB5:
+  73:../measures.c **** void measure_isr_timer3_begin(void) {
+ 1478              		.loc 1 73 0
+ 1479              		.cfi_startproc
+ 1480              		@ Function supports interworking.
+ 1481              		@ args = 0, pretend = 0, frame = 0
+ 1482              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1483 00d8 0DC0A0E1 		mov	ip, sp
+ 1484              	.LCFI4:
+ 1485              		.cfi_def_cfa_register 12
+ 1486 00dc 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1487 00e0 04B04CE2 		sub	fp, ip, #4
+ 1488              		.cfi_offset 14, -8
+ 1489              		.cfi_offset 13, -12
+ 1490              		.cfi_offset 11, -16
+ 1491              	.LCFI5:
+ 1492              		.cfi_def_cfa 11, 4
+  74:../measures.c ****     g_isr_timer3_last_t0 = timer2_count();
+ 1493              		.loc 1 74 0
+ 1494 00e4 FEFFFFEB 		bl	timer2_count
+ 1495 00e8 0020A0E1 		mov	r2, r0
+ 1496 00ec 0C309FE5 		ldr	r3, .L9
+ 1497 00f0 002083E5 		str	r2, [r3, #0]
+  75:../measures.c **** }
+ 1498              		.loc 1 75 0
+ 1499 00f4 0CD04BE2 		sub	sp, fp, #12
+ 1500 00f8 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1501 00fc 1EFF2FE1 		bx	lr
+ 1502              	.L10:
+ 1503              		.align	2
+ 1504              	.L9:
+ 1505 0100 00000000 		.word	g_isr_timer3_last_t0
+ 1506              		.cfi_endproc
+ 1507              	.LFE5:
+ 1509              		.align	2
+ 1510              		.global	measure_isr_timer3_end
+ 1512              	measure_isr_timer3_end:
+ 1513              	.LFB6:
+  76:../measures.c **** void measure_isr_timer3_end(void) {
+ 1514              		.loc 1 76 0
+ 1515              		.cfi_startproc
+ 1516              		@ Function supports interworking.
+ 1517              		@ args = 0, pretend = 0, frame = 8
+ 1518              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1519 0104 0DC0A0E1 		mov	ip, sp
+ 1520              	.LCFI6:
+ 1521              		.cfi_def_cfa_register 12
+ 1522 0108 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1523 010c 04B04CE2 		sub	fp, ip, #4
+ 1524              		.cfi_offset 14, -8
+ 1525              		.cfi_offset 13, -12
+ 1526              		.cfi_offset 11, -16
+ 1527              	.LCFI7:
+ 1528              		.cfi_def_cfa 11, 4
+ 1529 0110 08D04DE2 		sub	sp, sp, #8
+  77:../measures.c ****     unsigned t1;
+  78:../measures.c ****     t1 = timer2_count();
+ 1530              		.loc 1 78 0
+ 1531 0114 FEFFFFEB 		bl	timer2_count
+ 1532 0118 10000BE5 		str	r0, [fp, #-16]
+  79:../measures.c ****     if (t1 > g_isr_timer3_last_t0) {
+ 1533              		.loc 1 79 0
+ 1534 011c 7C309FE5 		ldr	r3, .L13
+ 1535 0120 003093E5 		ldr	r3, [r3, #0]
+ 1536 0124 10201BE5 		ldr	r2, [fp, #-16]
+ 1537 0128 030052E1 		cmp	r2, r3
+ 1538 012c 1800009A 		bls	.L11
+  80:../measures.c ****         g_isr_timer3_accum_us += (t1 - g_isr_timer3_last_t0);
+ 1539              		.loc 1 80 0
+ 1540 0130 68309FE5 		ldr	r3, .L13
+ 1541 0134 003093E5 		ldr	r3, [r3, #0]
+ 1542 0138 10201BE5 		ldr	r2, [fp, #-16]
+ 1543 013c 022063E0 		rsb	r2, r3, r2
+ 1544 0140 5C309FE5 		ldr	r3, .L13+4
+ 1545 0144 003093E5 		ldr	r3, [r3, #0]
+ 1546 0148 032082E0 		add	r2, r2, r3
+ 1547 014c 50309FE5 		ldr	r3, .L13+4
+ 1548 0150 002083E5 		str	r2, [r3, #0]
+  81:../measures.c ****         g_isr_timer3_count++;
+ 1549              		.loc 1 81 0
+ 1550 0154 4C309FE5 		ldr	r3, .L13+8
+ 1551 0158 003093E5 		ldr	r3, [r3, #0]
+ 1552 015c 012083E2 		add	r2, r3, #1
+ 1553 0160 40309FE5 		ldr	r3, .L13+8
+ 1554 0164 002083E5 		str	r2, [r3, #0]
+  82:../measures.c ****         g_isr_timer3_avg_us = g_isr_timer3_accum_us / g_isr_timer3_count;
+ 1555              		.loc 1 82 0
+ 1556 0168 34309FE5 		ldr	r3, .L13+4
+ 1557 016c 002093E5 		ldr	r2, [r3, #0]
+ 1558 0170 30309FE5 		ldr	r3, .L13+8
+ 1559 0174 003093E5 		ldr	r3, [r3, #0]
+ 1560 0178 0200A0E1 		mov	r0, r2
+ 1561 017c 0310A0E1 		mov	r1, r3
+ 1562 0180 FEFFFFEB 		bl	__aeabi_uidiv
+ 1563 0184 0030A0E1 		mov	r3, r0
+ 1564 0188 0320A0E1 		mov	r2, r3
+ 1565 018c 18309FE5 		ldr	r3, .L13+12
+ 1566 0190 002083E5 		str	r2, [r3, #0]
+ 1567              	.L11:
+  83:../measures.c ****     }
+  84:../measures.c **** }
+ 1568              		.loc 1 84 0
+ 1569 0194 0CD04BE2 		sub	sp, fp, #12
+ 1570 0198 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1571 019c 1EFF2FE1 		bx	lr
+ 1572              	.L14:
+ 1573              		.align	2
+ 1574              	.L13:
+ 1575 01a0 00000000 		.word	g_isr_timer3_last_t0
+ 1576 01a4 00000000 		.word	g_isr_timer3_accum_us
+ 1577 01a8 00000000 		.word	g_isr_timer3_count
+ 1578 01ac 00000000 		.word	g_isr_timer3_avg_us
+ 1579              		.cfi_endproc
+ 1580              	.LFE6:
+ 1582              		.bss
+ 1583              		.align	2
+ 1584              	g_overhead_us:
+ 1585 0524 00000000 		.space	4
+ 1586              		.text
+ 1587              		.align	2
+ 1589              	medir_overhead:
+ 1590              	.LFB7:
+  85:../measures.c **** 
+  86:../measures.c **** /* -------- Overhead -------- */
+  87:../measures.c **** static unsigned g_overhead_us = 0;
+  88:../measures.c **** 
+  89:../measures.c **** static unsigned medir_overhead(void) {
+ 1591              		.loc 1 89 0
+ 1592              		.cfi_startproc
+ 1593              		@ Function supports interworking.
+ 1594              		@ args = 0, pretend = 0, frame = 24
+ 1595              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1596 01b0 0DC0A0E1 		mov	ip, sp
+ 1597              	.LCFI8:
+ 1598              		.cfi_def_cfa_register 12
+ 1599 01b4 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1600 01b8 04B04CE2 		sub	fp, ip, #4
+ 1601              		.cfi_offset 14, -8
+ 1602              		.cfi_offset 13, -12
+ 1603              		.cfi_offset 11, -16
+ 1604              	.LCFI9:
+ 1605              		.cfi_def_cfa 11, 4
+ 1606 01bc 18D04DE2 		sub	sp, sp, #24
+  90:../measures.c ****     unsigned min;
+  91:../measures.c ****     unsigned i;
+  92:../measures.c ****     min = 0xFFFFFFFF;
+ 1607              		.loc 1 92 0
+ 1608 01c0 0030E0E3 		mvn	r3, #0
+ 1609 01c4 10300BE5 		str	r3, [fp, #-16]
+  93:../measures.c ****     for (i = 0; i < 50; ++i) {
+ 1610              		.loc 1 93 0
+ 1611 01c8 0030A0E3 		mov	r3, #0
+ 1612 01cc 14300BE5 		str	r3, [fp, #-20]
+ 1613 01d0 100000EA 		b	.L16
+ 1614              	.L18:
+ 1615              	.LBB2:
+  94:../measures.c ****         unsigned t0, t1, d;
+  95:../measures.c ****         t0 = timer2_count();
+ 1616              		.loc 1 95 0
+ 1617 01d4 FEFFFFEB 		bl	timer2_count
+ 1618 01d8 18000BE5 		str	r0, [fp, #-24]
+  96:../measures.c ****         t1 = timer2_count();
+ 1619              		.loc 1 96 0
+ 1620 01dc FEFFFFEB 		bl	timer2_count
+ 1621 01e0 1C000BE5 		str	r0, [fp, #-28]
+  97:../measures.c ****         d  = t1 - t0;
+ 1622              		.loc 1 97 0
+ 1623 01e4 1C201BE5 		ldr	r2, [fp, #-28]
+ 1624 01e8 18301BE5 		ldr	r3, [fp, #-24]
+ 1625 01ec 023063E0 		rsb	r3, r3, r2
+ 1626 01f0 20300BE5 		str	r3, [fp, #-32]
+  98:../measures.c ****         if (d < min) min = d;
+ 1627              		.loc 1 98 0
+ 1628 01f4 20201BE5 		ldr	r2, [fp, #-32]
+ 1629 01f8 10301BE5 		ldr	r3, [fp, #-16]
+ 1630 01fc 030052E1 		cmp	r2, r3
+ 1631 0200 0100002A 		bcs	.L17
+ 1632              		.loc 1 98 0 is_stmt 0 discriminator 1
+ 1633 0204 20301BE5 		ldr	r3, [fp, #-32]
+ 1634 0208 10300BE5 		str	r3, [fp, #-16]
+ 1635              	.L17:
+ 1636              	.LBE2:
+  93:../measures.c ****     for (i = 0; i < 50; ++i) {
+ 1637              		.loc 1 93 0 is_stmt 1
+ 1638 020c 14301BE5 		ldr	r3, [fp, #-20]
+ 1639 0210 013083E2 		add	r3, r3, #1
+ 1640 0214 14300BE5 		str	r3, [fp, #-20]
+ 1641              	.L16:
+  93:../measures.c ****     for (i = 0; i < 50; ++i) {
+ 1642              		.loc 1 93 0 is_stmt 0 discriminator 1
+ 1643 0218 14301BE5 		ldr	r3, [fp, #-20]
+ 1644 021c 310053E3 		cmp	r3, #49
+ 1645 0220 EBFFFF9A 		bls	.L18
+  99:../measures.c ****     }
+ 100:../measures.c ****     return min;
+ 1646              		.loc 1 100 0 is_stmt 1
+ 1647 0224 10301BE5 		ldr	r3, [fp, #-16]
+ 101:../measures.c **** }
+ 1648              		.loc 1 101 0
+ 1649 0228 0300A0E1 		mov	r0, r3
+ 1650 022c 0CD04BE2 		sub	sp, fp, #12
+ 1651 0230 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1652 0234 1EFF2FE1 		bx	lr
+ 1653              		.cfi_endproc
+ 1654              	.LFE7:
+ 1656              		.align	2
+ 1658              	sqrt_entero:
+ 1659              	.LFB8:
+ 102:../measures.c **** 
+ 103:../measures.c **** /* -------- sqrt entero aproximado para SD (evita libm) -------- */
+ 104:../measures.c **** static unsigned sqrt_entero(unsigned x) {
+ 1660              		.loc 1 104 0
+ 1661              		.cfi_startproc
+ 1662              		@ Function supports interworking.
+ 1663              		@ args = 0, pretend = 0, frame = 16
+ 1664              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1665 0238 0DC0A0E1 		mov	ip, sp
+ 1666              	.LCFI10:
+ 1667              		.cfi_def_cfa_register 12
+ 1668 023c 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1669 0240 04B04CE2 		sub	fp, ip, #4
+ 1670              		.cfi_offset 14, -8
+ 1671              		.cfi_offset 13, -12
+ 1672              		.cfi_offset 11, -16
+ 1673              	.LCFI11:
+ 1674              		.cfi_def_cfa 11, 4
+ 1675 0244 10D04DE2 		sub	sp, sp, #16
+ 1676 0248 18000BE5 		str	r0, [fp, #-24]
+ 105:../measures.c ****     unsigned r;
+ 106:../measures.c ****     unsigned r2;
+ 107:../measures.c ****     r = 0;
+ 1677              		.loc 1 107 0
+ 1678 024c 0030A0E3 		mov	r3, #0
+ 1679 0250 10300BE5 		str	r3, [fp, #-16]
+ 108:../measures.c ****     while ((r+1)*(r+1) <= x) {
+ 1680              		.loc 1 108 0
+ 1681 0254 020000EA 		b	.L20
+ 1682              	.L21:
+ 109:../measures.c ****         r++;
+ 1683              		.loc 1 109 0
+ 1684 0258 10301BE5 		ldr	r3, [fp, #-16]
+ 1685 025c 013083E2 		add	r3, r3, #1
+ 1686 0260 10300BE5 		str	r3, [fp, #-16]
+ 1687              	.L20:
+ 108:../measures.c ****     while ((r+1)*(r+1) <= x) {
+ 1688              		.loc 1 108 0 discriminator 1
+ 1689 0264 10301BE5 		ldr	r3, [fp, #-16]
+ 1690 0268 013083E2 		add	r3, r3, #1
+ 1691 026c 10201BE5 		ldr	r2, [fp, #-16]
+ 1692 0270 012082E2 		add	r2, r2, #1
+ 1693 0274 930202E0 		mul	r2, r3, r2
+ 1694 0278 18301BE5 		ldr	r3, [fp, #-24]
+ 1695 027c 030052E1 		cmp	r2, r3
+ 1696 0280 F4FFFF9A 		bls	.L21
+ 110:../measures.c ****     }
+ 111:../measures.c ****     r2 = r*r;
+ 1697              		.loc 1 111 0
+ 1698 0284 10301BE5 		ldr	r3, [fp, #-16]
+ 1699 0288 10201BE5 		ldr	r2, [fp, #-16]
+ 1700 028c 920303E0 		mul	r3, r2, r3
+ 1701 0290 14300BE5 		str	r3, [fp, #-20]
+ 112:../measures.c ****     (void)r2;
+ 113:../measures.c ****     return r;
+ 1702              		.loc 1 113 0
+ 1703 0294 10301BE5 		ldr	r3, [fp, #-16]
+ 114:../measures.c **** }
+ 1704              		.loc 1 114 0
+ 1705 0298 0300A0E1 		mov	r0, r3
+ 1706 029c 0CD04BE2 		sub	sp, fp, #12
+ 1707 02a0 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1708 02a4 1EFF2FE1 		bx	lr
+ 1709              		.cfi_endproc
+ 1710              	.LFE8:
+ 1712              		.align	2
+ 1714              	registrar_medida:
+ 1715              	.LFB9:
+ 115:../measures.c **** 
+ 116:../measures.c **** /* -------- Macro medición -------- */
+ 117:../measures.c **** #define MEDIR_REP(expr, rep, out_ticks) do {      \
+ 118:../measures.c ****     unsigned _t0 = timer2_count();                \
+ 119:../measures.c ****     int _i;                                       \
+ 120:../measures.c ****     for (_i = 0; _i < (rep); ++_i) { expr; }      \
+ 121:../measures.c ****     out_ticks = timer2_count() - _t0;             \
+ 122:../measures.c **** } while (0)
+ 123:../measures.c **** 
+ 124:../measures.c **** /* -------- Registrar medida -------- */
+ 125:../measures.c **** static void registrar_medida(const medida_t *m) {
+ 1716              		.loc 1 125 0
+ 1717              		.cfi_startproc
+ 1718              		@ Function supports interworking.
+ 1719              		@ args = 0, pretend = 0, frame = 8
+ 1720              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1721 02a8 0DC0A0E1 		mov	ip, sp
+ 1722              	.LCFI12:
+ 1723              		.cfi_def_cfa_register 12
+ 1724 02ac 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 1725 02b0 04B04CE2 		sub	fp, ip, #4
+ 1726              		.cfi_offset 14, -8
+ 1727              		.cfi_offset 13, -12
+ 1728              		.cfi_offset 11, -16
+ 1729              	.LCFI13:
+ 1730              		.cfi_def_cfa 11, 4
+ 1731 02b4 08D04DE2 		sub	sp, sp, #8
+ 1732 02b8 10000BE5 		str	r0, [fp, #-16]
+ 126:../measures.c ****     if (g_medidas_count < MAX_MEDIDAS) {
+ 1733              		.loc 1 126 0
+ 1734 02bc 68309FE5 		ldr	r3, .L24
+ 1735 02c0 003093E5 		ldr	r3, [r3, #0]
+ 1736 02c4 0F0053E3 		cmp	r3, #15
+ 1737 02c8 1400008A 		bhi	.L22
+ 127:../measures.c ****         g_medidas[g_medidas_count] = *m;
+ 1738              		.loc 1 127 0
+ 1739 02cc 58309FE5 		ldr	r3, .L24
+ 1740 02d0 002093E5 		ldr	r2, [r3, #0]
+ 1741 02d4 54109FE5 		ldr	r1, .L24+4
+ 1742 02d8 0230A0E1 		mov	r3, r2
+ 1743 02dc 0331A0E1 		mov	r3, r3, asl #2
+ 1744 02e0 023083E0 		add	r3, r3, r2
+ 1745 02e4 0332A0E1 		mov	r3, r3, asl #4
+ 1746 02e8 032081E0 		add	r2, r1, r3
+ 1747 02ec 10301BE5 		ldr	r3, [fp, #-16]
+ 1748 02f0 0210A0E1 		mov	r1, r2
+ 1749 02f4 0320A0E1 		mov	r2, r3
+ 1750 02f8 5030A0E3 		mov	r3, #80
+ 1751 02fc 0100A0E1 		mov	r0, r1
+ 1752 0300 0210A0E1 		mov	r1, r2
+ 1753 0304 0320A0E1 		mov	r2, r3
+ 1754 0308 FEFFFFEB 		bl	memcpy
+ 128:../measures.c ****         g_medidas_count++;
+ 1755              		.loc 1 128 0
+ 1756 030c 18309FE5 		ldr	r3, .L24
+ 1757 0310 003093E5 		ldr	r3, [r3, #0]
+ 1758 0314 012083E2 		add	r2, r3, #1
+ 1759 0318 0C309FE5 		ldr	r3, .L24
+ 1760 031c 002083E5 		str	r2, [r3, #0]
+ 1761              	.L22:
+ 129:../measures.c ****     }
+ 130:../measures.c **** }
+ 1762              		.loc 1 130 0
+ 1763 0320 0CD04BE2 		sub	sp, fp, #12
+ 1764 0324 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 1765 0328 1EFF2FE1 		bx	lr
+ 1766              	.L25:
+ 1767              		.align	2
+ 1768              	.L24:
+ 1769 032c 00050000 		.word	g_medidas_count
+ 1770 0330 00000000 		.word	g_medidas
+ 1771              		.cfi_endproc
+ 1772              	.LFE9:
+ 1774              		.global	__aeabi_ui2d
+ 1775              		.global	__aeabi_dadd
+ 1776              		.global	__aeabi_dmul
+ 1777              		.global	__aeabi_ddiv
+ 1778              		.global	__aeabi_dsub
+ 1779              		.global	__aeabi_dcmplt
+ 1780              		.global	__aeabi_d2uiz
+ 1781              		.align	2
+ 1783              	medir_bloque:
+ 1784              	.LFB10:
+ 131:../measures.c **** 
+ 132:../measures.c **** /* -------- Medición genérica -------- */
+ 133:../measures.c **** static void medir_bloque(void (*fn)(void),
+ 134:../measures.c ****                          unsigned rep,
+ 135:../measures.c ****                          unsigned nmed,
+ 136:../measures.c ****                          const char *name)
+ 137:../measures.c **** {
+ 1785              		.loc 1 137 0
+ 1786              		.cfi_startproc
+ 1787              		@ Function supports interworking.
+ 1788              		@ args = 0, pretend = 0, frame = 192
+ 1789              		@ frame_needed = 1, uses_anonymous_args = 0
+ 1790 0334 0DC0A0E1 		mov	ip, sp
+ 1791              	.LCFI14:
+ 1792              		.cfi_def_cfa_register 12
+ 1793 0338 70D82DE9 		stmfd	sp!, {r4, r5, r6, fp, ip, lr, pc}
+ 1794 033c 04B04CE2 		sub	fp, ip, #4
+ 1795              		.cfi_offset 14, -8
+ 1796              		.cfi_offset 13, -12
+ 1797              		.cfi_offset 11, -16
+ 1798              		.cfi_offset 6, -20
+ 1799              		.cfi_offset 5, -24
+ 1800              		.cfi_offset 4, -28
+ 1801              	.LCFI15:
+ 1802              		.cfi_def_cfa 11, 4
+ 1803 0340 C4D04DE2 		sub	sp, sp, #196
+ 1804 0344 D0000BE5 		str	r0, [fp, #-208]
+ 1805 0348 D4100BE5 		str	r1, [fp, #-212]
+ 1806 034c D8200BE5 		str	r2, [fp, #-216]
+ 1807 0350 DC300BE5 		str	r3, [fp, #-220]
+ 138:../measures.c ****     unsigned min_us;
+ 139:../measures.c ****     unsigned max_us;
+ 140:../measures.c ****     double sum;
+ 141:../measures.c ****     double sum2;
+ 142:../measures.c ****     unsigned m;
+ 143:../measures.c ****     medida_t res;
+ 144:../measures.c ****     unsigned ticks;
+ 145:../measures.c **** 
+ 146:../measures.c ****     min_us = 0xFFFFFFFF;
+ 1808              		.loc 1 146 0
+ 1809 0354 0030E0E3 		mvn	r3, #0
+ 1810 0358 20300BE5 		str	r3, [fp, #-32]
+ 147:../measures.c ****     max_us = 0;
+ 1811              		.loc 1 147 0
+ 1812 035c 0030A0E3 		mov	r3, #0
+ 1813 0360 24300BE5 		str	r3, [fp, #-36]
+ 148:../measures.c ****     sum = 0.0;
+ 1814              		.loc 1 148 0
+ 1815 0364 0030A0E3 		mov	r3, #0
+ 1816 0368 0040A0E3 		mov	r4, #0
+ 1817 036c 2C300BE5 		str	r3, [fp, #-44]
+ 1818 0370 28400BE5 		str	r4, [fp, #-40]
+ 149:../measures.c ****     sum2 = 0.0;
+ 1819              		.loc 1 149 0
+ 1820 0374 0030A0E3 		mov	r3, #0
+ 1821 0378 0040A0E3 		mov	r4, #0
+ 1822 037c 34300BE5 		str	r3, [fp, #-52]
+ 1823 0380 30400BE5 		str	r4, [fp, #-48]
+ 150:../measures.c **** 
+ 151:../measures.c ****     for (m = 0; m < nmed; ++m) {
+ 1824              		.loc 1 151 0
+ 1825 0384 0030A0E3 		mov	r3, #0
+ 1826 0388 38300BE5 		str	r3, [fp, #-56]
+ 1827 038c 510000EA 		b	.L27
+ 1828              	.L33:
+ 1829              	.LBB3:
+ 152:../measures.c ****         MEDIR_REP(fn(), rep, ticks);
+ 1830              		.loc 1 152 0
+ 1831 0390 FEFFFFEB 		bl	timer2_count
+ 1832 0394 54000BE5 		str	r0, [fp, #-84]
+ 1833 0398 0030A0E3 		mov	r3, #0
+ 1834 039c 40300BE5 		str	r3, [fp, #-64]
+ 1835 03a0 050000EA 		b	.L28
+ 1836              	.L29:
+ 1837              		.loc 1 152 0 is_stmt 0 discriminator 2
+ 1838 03a4 D0301BE5 		ldr	r3, [fp, #-208]
+ 1839 03a8 0FE0A0E1 		mov	lr, pc
+ 1840 03ac 13FF2FE1 		bx	r3
+ 1841 03b0 40301BE5 		ldr	r3, [fp, #-64]
+ 1842 03b4 013083E2 		add	r3, r3, #1
+ 1843 03b8 40300BE5 		str	r3, [fp, #-64]
+ 1844              	.L28:
+ 1845              		.loc 1 152 0 discriminator 1
+ 1846 03bc 40201BE5 		ldr	r2, [fp, #-64]
+ 1847 03c0 D4301BE5 		ldr	r3, [fp, #-212]
+ 1848 03c4 030052E1 		cmp	r2, r3
+ 1849 03c8 F5FFFF3A 		bcc	.L29
+ 1850              		.loc 1 152 0 discriminator 3
+ 1851 03cc FEFFFFEB 		bl	timer2_count
+ 1852 03d0 0020A0E1 		mov	r2, r0
+ 1853 03d4 54301BE5 		ldr	r3, [fp, #-84]
+ 1854 03d8 023063E0 		rsb	r3, r3, r2
+ 1855 03dc 3C300BE5 		str	r3, [fp, #-60]
+ 1856              	.LBE3:
+ 153:../measures.c ****         if (ticks > g_overhead_us) ticks -= g_overhead_us;
+ 1857              		.loc 1 153 0 is_stmt 1 discriminator 3
+ 1858 03e0 A0339FE5 		ldr	r3, .L39
+ 1859 03e4 003093E5 		ldr	r3, [r3, #0]
+ 1860 03e8 3C201BE5 		ldr	r2, [fp, #-60]
+ 1861 03ec 030052E1 		cmp	r2, r3
+ 1862 03f0 0400009A 		bls	.L30
+ 1863              		.loc 1 153 0 is_stmt 0 discriminator 1
+ 1864 03f4 8C339FE5 		ldr	r3, .L39
+ 1865 03f8 003093E5 		ldr	r3, [r3, #0]
+ 1866 03fc 3C201BE5 		ldr	r2, [fp, #-60]
+ 1867 0400 023063E0 		rsb	r3, r3, r2
+ 1868 0404 3C300BE5 		str	r3, [fp, #-60]
+ 1869              	.L30:
+ 154:../measures.c ****         if (ticks < min_us) min_us = ticks;
+ 1870              		.loc 1 154 0 is_stmt 1
+ 1871 0408 3C201BE5 		ldr	r2, [fp, #-60]
+ 1872 040c 20301BE5 		ldr	r3, [fp, #-32]
+ 1873 0410 030052E1 		cmp	r2, r3
+ 1874 0414 0100002A 		bcs	.L31
+ 1875              		.loc 1 154 0 is_stmt 0 discriminator 1
+ 1876 0418 3C301BE5 		ldr	r3, [fp, #-60]
+ 1877 041c 20300BE5 		str	r3, [fp, #-32]
+ 1878              	.L31:
+ 155:../measures.c ****         if (ticks > max_us) max_us = ticks;
+ 1879              		.loc 1 155 0 is_stmt 1
+ 1880 0420 3C201BE5 		ldr	r2, [fp, #-60]
+ 1881 0424 24301BE5 		ldr	r3, [fp, #-36]
+ 1882 0428 030052E1 		cmp	r2, r3
+ 1883 042c 0100009A 		bls	.L32
+ 1884              		.loc 1 155 0 is_stmt 0 discriminator 1
+ 1885 0430 3C301BE5 		ldr	r3, [fp, #-60]
+ 1886 0434 24300BE5 		str	r3, [fp, #-36]
+ 1887              	.L32:
+ 156:../measures.c ****         sum  += ticks;
+ 1888              		.loc 1 156 0 is_stmt 1
+ 1889 0438 3C001BE5 		ldr	r0, [fp, #-60]
+ 1890 043c FEFFFFEB 		bl	__aeabi_ui2d
+ 1891 0440 0030A0E1 		mov	r3, r0
+ 1892 0444 0140A0E1 		mov	r4, r1
+ 1893 0448 2C104BE2 		sub	r1, fp, #44
+ 1894 044c 030091E8 		ldmia	r1, {r0-r1}
+ 1895 0450 0320A0E1 		mov	r2, r3
+ 1896 0454 0430A0E1 		mov	r3, r4
+ 1897 0458 FEFFFFEB 		bl	__aeabi_dadd
+ 1898 045c 0030A0E1 		mov	r3, r0
+ 1899 0460 0140A0E1 		mov	r4, r1
+ 1900 0464 2C300BE5 		str	r3, [fp, #-44]
+ 1901 0468 28400BE5 		str	r4, [fp, #-40]
+ 157:../measures.c ****         sum2 += (double)ticks * (double)ticks;
+ 1902              		.loc 1 157 0
+ 1903 046c 3C001BE5 		ldr	r0, [fp, #-60]
+ 1904 0470 FEFFFFEB 		bl	__aeabi_ui2d
+ 1905 0474 0050A0E1 		mov	r5, r0
+ 1906 0478 0160A0E1 		mov	r6, r1
+ 1907 047c 3C001BE5 		ldr	r0, [fp, #-60]
+ 1908 0480 FEFFFFEB 		bl	__aeabi_ui2d
+ 1909 0484 0030A0E1 		mov	r3, r0
+ 1910 0488 0140A0E1 		mov	r4, r1
+ 1911 048c 0500A0E1 		mov	r0, r5
+ 1912 0490 0610A0E1 		mov	r1, r6
+ 1913 0494 0320A0E1 		mov	r2, r3
+ 1914 0498 0430A0E1 		mov	r3, r4
+ 1915 049c FEFFFFEB 		bl	__aeabi_dmul
+ 1916 04a0 0030A0E1 		mov	r3, r0
+ 1917 04a4 0140A0E1 		mov	r4, r1
+ 1918 04a8 34104BE2 		sub	r1, fp, #52
+ 1919 04ac 030091E8 		ldmia	r1, {r0-r1}
+ 1920 04b0 0320A0E1 		mov	r2, r3
+ 1921 04b4 0430A0E1 		mov	r3, r4
+ 1922 04b8 FEFFFFEB 		bl	__aeabi_dadd
+ 1923 04bc 0030A0E1 		mov	r3, r0
+ 1924 04c0 0140A0E1 		mov	r4, r1
+ 1925 04c4 34300BE5 		str	r3, [fp, #-52]
+ 1926 04c8 30400BE5 		str	r4, [fp, #-48]
+ 151:../measures.c ****     for (m = 0; m < nmed; ++m) {
+ 1927              		.loc 1 151 0
+ 1928 04cc 38301BE5 		ldr	r3, [fp, #-56]
+ 1929 04d0 013083E2 		add	r3, r3, #1
+ 1930 04d4 38300BE5 		str	r3, [fp, #-56]
+ 1931              	.L27:
+ 151:../measures.c ****     for (m = 0; m < nmed; ++m) {
+ 1932              		.loc 1 151 0 is_stmt 0 discriminator 1
+ 1933 04d8 38201BE5 		ldr	r2, [fp, #-56]
+ 1934 04dc D8301BE5 		ldr	r3, [fp, #-216]
+ 1935 04e0 030052E1 		cmp	r2, r3
+ 1936 04e4 A9FFFF3A 		bcc	.L33
+ 1937              	.LBB4:
+ 158:../measures.c ****     }
+ 159:../measures.c **** 
+ 160:../measures.c ****     {
+ 161:../measures.c ****         double mean_block_us;
+ 162:../measures.c ****         double var;
+ 163:../measures.c ****         double sd_block_us;
+ 164:../measures.c ****         double us_per_call;
+ 165:../measures.c ****         double cycles_per_call;
+ 166:../measures.c ****         int i;
+ 167:../measures.c **** 
+ 168:../measures.c ****         mean_block_us = sum / nmed;
+ 1938              		.loc 1 168 0 is_stmt 1
+ 1939 04e8 D8001BE5 		ldr	r0, [fp, #-216]
+ 1940 04ec FEFFFFEB 		bl	__aeabi_ui2d
+ 1941 04f0 0030A0E1 		mov	r3, r0
+ 1942 04f4 0140A0E1 		mov	r4, r1
+ 1943 04f8 2C104BE2 		sub	r1, fp, #44
+ 1944 04fc 030091E8 		ldmia	r1, {r0-r1}
+ 1945 0500 0320A0E1 		mov	r2, r3
+ 1946 0504 0430A0E1 		mov	r3, r4
+ 1947 0508 FEFFFFEB 		bl	__aeabi_ddiv
+ 1948 050c 0030A0E1 		mov	r3, r0
+ 1949 0510 0140A0E1 		mov	r4, r1
+ 1950 0514 5C300BE5 		str	r3, [fp, #-92]
+ 1951 0518 58400BE5 		str	r4, [fp, #-88]
+ 169:../measures.c ****         var = (sum2 / nmed) - (mean_block_us * mean_block_us);
+ 1952              		.loc 1 169 0
+ 1953 051c D8001BE5 		ldr	r0, [fp, #-216]
+ 1954 0520 FEFFFFEB 		bl	__aeabi_ui2d
+ 1955 0524 0030A0E1 		mov	r3, r0
+ 1956 0528 0140A0E1 		mov	r4, r1
+ 1957 052c 34104BE2 		sub	r1, fp, #52
+ 1958 0530 030091E8 		ldmia	r1, {r0-r1}
+ 1959 0534 0320A0E1 		mov	r2, r3
+ 1960 0538 0430A0E1 		mov	r3, r4
+ 1961 053c FEFFFFEB 		bl	__aeabi_ddiv
+ 1962 0540 0030A0E1 		mov	r3, r0
+ 1963 0544 0140A0E1 		mov	r4, r1
+ 1964 0548 0350A0E1 		mov	r5, r3
+ 1965 054c 0460A0E1 		mov	r6, r4
+ 1966 0550 5C104BE2 		sub	r1, fp, #92
+ 1967 0554 030091E8 		ldmia	r1, {r0-r1}
+ 1968 0558 5C304BE2 		sub	r3, fp, #92
+ 1969 055c 0C0093E8 		ldmia	r3, {r2-r3}
+ 1970 0560 FEFFFFEB 		bl	__aeabi_dmul
+ 1971 0564 0030A0E1 		mov	r3, r0
+ 1972 0568 0140A0E1 		mov	r4, r1
+ 1973 056c 0500A0E1 		mov	r0, r5
+ 1974 0570 0610A0E1 		mov	r1, r6
+ 1975 0574 0320A0E1 		mov	r2, r3
+ 1976 0578 0430A0E1 		mov	r3, r4
+ 1977 057c FEFFFFEB 		bl	__aeabi_dsub
+ 1978 0580 0030A0E1 		mov	r3, r0
+ 1979 0584 0140A0E1 		mov	r4, r1
+ 1980 0588 4C300BE5 		str	r3, [fp, #-76]
+ 1981 058c 48400BE5 		str	r4, [fp, #-72]
+ 170:../measures.c ****         if (var < 0.0) var = 0.0;
+ 1982              		.loc 1 170 0
+ 1983 0590 0130A0E3 		mov	r3, #1
+ 1984 0594 0340A0E1 		mov	r4, r3
+ 1985 0598 4C104BE2 		sub	r1, fp, #76
+ 1986 059c 030091E8 		ldmia	r1, {r0-r1}
+ 1987 05a0 0020A0E3 		mov	r2, #0
+ 1988 05a4 0030A0E3 		mov	r3, #0
+ 1989 05a8 FEFFFFEB 		bl	__aeabi_dcmplt
+ 1990 05ac 0030A0E1 		mov	r3, r0
+ 1991 05b0 000053E3 		cmp	r3, #0
+ 1992 05b4 0100001A 		bne	.L34
+ 1993 05b8 0030A0E3 		mov	r3, #0
+ 1994 05bc 0340A0E1 		mov	r4, r3
+ 1995              	.L34:
+ 1996 05c0 FF3004E2 		and	r3, r4, #255
+ 1997 05c4 000053E3 		cmp	r3, #0
+ 1998 05c8 0300000A 		beq	.L35
+ 1999              		.loc 1 170 0 is_stmt 0 discriminator 1
+ 2000 05cc 0030A0E3 		mov	r3, #0
+ 2001 05d0 0040A0E3 		mov	r4, #0
+ 2002 05d4 4C300BE5 		str	r3, [fp, #-76]
+ 2003 05d8 48400BE5 		str	r4, [fp, #-72]
+ 2004              	.L35:
+ 2005              	.LBB5:
+ 171:../measures.c **** 
+ 172:../measures.c ****         /* Aproximación SD sin libm:
+ 173:../measures.c ****            sd = sqrt(var). Como var está en double, lo pasamos a entero para una aproximación. */
+ 174:../measures.c ****         {
+ 175:../measures.c ****             unsigned var_int;
+ 176:../measures.c ****             var_int = (unsigned)(var + 0.5);
+ 2006              		.loc 1 176 0 is_stmt 1
+ 2007 05dc 4C104BE2 		sub	r1, fp, #76
+ 2008 05e0 030091E8 		ldmia	r1, {r0-r1}
+ 2009 05e4 0020A0E3 		mov	r2, #0
+ 2010 05e8 FF35A0E3 		mov	r3, #1069547520
+ 2011 05ec 023683E2 		add	r3, r3, #2097152
+ 2012 05f0 FEFFFFEB 		bl	__aeabi_dadd
+ 2013 05f4 0030A0E1 		mov	r3, r0
+ 2014 05f8 0140A0E1 		mov	r4, r1
+ 2015 05fc 0300A0E1 		mov	r0, r3
+ 2016 0600 0410A0E1 		mov	r1, r4
+ 2017 0604 FEFFFFEB 		bl	__aeabi_d2uiz
+ 2018 0608 0030A0E1 		mov	r3, r0
+ 2019 060c 60300BE5 		str	r3, [fp, #-96]
+ 177:../measures.c ****             sd_block_us = (double)sqrt_entero(var_int);
+ 2020              		.loc 1 177 0
+ 2021 0610 60001BE5 		ldr	r0, [fp, #-96]
+ 2022 0614 07FFFFEB 		bl	sqrt_entero
+ 2023 0618 0030A0E1 		mov	r3, r0
+ 2024 061c 0300A0E1 		mov	r0, r3
+ 2025 0620 FEFFFFEB 		bl	__aeabi_ui2d
+ 2026 0624 0030A0E1 		mov	r3, r0
+ 2027 0628 0140A0E1 		mov	r4, r1
+ 2028 062c 6C300BE5 		str	r3, [fp, #-108]
+ 2029 0630 68400BE5 		str	r4, [fp, #-104]
+ 2030              	.LBE5:
+ 178:../measures.c ****         }
+ 179:../measures.c **** 
+ 180:../measures.c ****         us_per_call = mean_block_us / rep;
+ 2031              		.loc 1 180 0
+ 2032 0634 D4001BE5 		ldr	r0, [fp, #-212]
+ 2033 0638 FEFFFFEB 		bl	__aeabi_ui2d
+ 2034 063c 0030A0E1 		mov	r3, r0
+ 2035 0640 0140A0E1 		mov	r4, r1
+ 2036 0644 5C104BE2 		sub	r1, fp, #92
+ 2037 0648 030091E8 		ldmia	r1, {r0-r1}
+ 2038 064c 0320A0E1 		mov	r2, r3
+ 2039 0650 0430A0E1 		mov	r3, r4
+ 2040 0654 FEFFFFEB 		bl	__aeabi_ddiv
+ 2041 0658 0030A0E1 		mov	r3, r0
+ 2042 065c 0140A0E1 		mov	r4, r1
+ 2043 0660 74300BE5 		str	r3, [fp, #-116]
+ 2044 0664 70400BE5 		str	r4, [fp, #-112]
+ 181:../measures.c ****         cycles_per_call = us_per_call * 64.0;
+ 2045              		.loc 1 181 0
+ 2046 0668 74104BE2 		sub	r1, fp, #116
+ 2047 066c 030091E8 		ldmia	r1, {r0-r1}
+ 2048 0670 0020A0E3 		mov	r2, #0
+ 2049 0674 0131A0E3 		mov	r3, #1073741824
+ 2050 0678 053683E2 		add	r3, r3, #5242880
+ 2051 067c FEFFFFEB 		bl	__aeabi_dmul
+ 2052 0680 0030A0E1 		mov	r3, r0
+ 2053 0684 0140A0E1 		mov	r4, r1
+ 2054 0688 7C300BE5 		str	r3, [fp, #-124]
+ 2055 068c 78400BE5 		str	r4, [fp, #-120]
+ 182:../measures.c **** 
+ 183:../measures.c ****         for (i = 0; i < 31 && name[i] != '\0'; ++i) {
+ 2056              		.loc 1 183 0
+ 2057 0690 0030A0E3 		mov	r3, #0
+ 2058 0694 50300BE5 		str	r3, [fp, #-80]
+ 2059 0698 0C0000EA 		b	.L36
+ 2060              	.L38:
+ 184:../measures.c ****             res.name[i] = name[i];
+ 2061              		.loc 1 184 0 discriminator 1
+ 2062 069c 50301BE5 		ldr	r3, [fp, #-80]
+ 2063 06a0 DC201BE5 		ldr	r2, [fp, #-220]
+ 2064 06a4 033082E0 		add	r3, r2, r3
+ 2065 06a8 0020D3E5 		ldrb	r2, [r3, #0]	@ zero_extendqisi2
+ 2066 06ac AF30E0E3 		mvn	r3, #175
+ 2067 06b0 50101BE5 		ldr	r1, [fp, #-80]
+ 2068 06b4 1C004BE2 		sub	r0, fp, #28
+ 2069 06b8 011080E0 		add	r1, r0, r1
+ 2070 06bc 033081E0 		add	r3, r1, r3
+ 2071 06c0 0020C3E5 		strb	r2, [r3, #0]
+ 183:../measures.c ****         for (i = 0; i < 31 && name[i] != '\0'; ++i) {
+ 2072              		.loc 1 183 0 discriminator 1
+ 2073 06c4 50301BE5 		ldr	r3, [fp, #-80]
+ 2074 06c8 013083E2 		add	r3, r3, #1
+ 2075 06cc 50300BE5 		str	r3, [fp, #-80]
+ 2076              	.L36:
+ 2077 06d0 50301BE5 		ldr	r3, [fp, #-80]
+ 2078 06d4 1E0053E3 		cmp	r3, #30
+ 2079 06d8 050000CA 		bgt	.L37
+ 183:../measures.c ****         for (i = 0; i < 31 && name[i] != '\0'; ++i) {
+ 2080              		.loc 1 183 0 is_stmt 0 discriminator 2
+ 2081 06dc 50301BE5 		ldr	r3, [fp, #-80]
+ 2082 06e0 DC201BE5 		ldr	r2, [fp, #-220]
+ 2083 06e4 033082E0 		add	r3, r2, r3
+ 2084 06e8 0030D3E5 		ldrb	r3, [r3, #0]	@ zero_extendqisi2
+ 2085 06ec 000053E3 		cmp	r3, #0
+ 2086 06f0 E9FFFF1A 		bne	.L38
+ 2087              	.L37:
+ 185:../measures.c ****         }
+ 186:../measures.c ****         res.name[i] = '\0';
+ 2088              		.loc 1 186 0 is_stmt 1
+ 2089 06f4 AF30E0E3 		mvn	r3, #175
+ 2090 06f8 50201BE5 		ldr	r2, [fp, #-80]
+ 2091 06fc 1C104BE2 		sub	r1, fp, #28
+ 2092 0700 022081E0 		add	r2, r1, r2
+ 2093 0704 033082E0 		add	r3, r2, r3
+ 2094 0708 0020A0E3 		mov	r2, #0
+ 2095 070c 0020C3E5 		strb	r2, [r3, #0]
+ 187:../measures.c **** 
+ 188:../measures.c ****         res.rep              = rep;
+ 2096              		.loc 1 188 0
+ 2097 0710 D4301BE5 		ldr	r3, [fp, #-212]
+ 2098 0714 AC300BE5 		str	r3, [fp, #-172]
+ 189:../measures.c ****         res.nmed             = nmed;
+ 2099              		.loc 1 189 0
+ 2100 0718 D8301BE5 		ldr	r3, [fp, #-216]
+ 2101 071c A8300BE5 		str	r3, [fp, #-168]
+ 190:../measures.c ****         res.min_us           = min_us;
+ 2102              		.loc 1 190 0
+ 2103 0720 20301BE5 		ldr	r3, [fp, #-32]
+ 2104 0724 A4300BE5 		str	r3, [fp, #-164]
+ 191:../measures.c ****         res.max_us           = max_us;
+ 2105              		.loc 1 191 0
+ 2106 0728 24301BE5 		ldr	r3, [fp, #-36]
+ 2107 072c A0300BE5 		str	r3, [fp, #-160]
+ 192:../measures.c ****         res.mean_block_us    = mean_block_us;
+ 2108              		.loc 1 192 0
+ 2109 0730 5C404BE2 		sub	r4, fp, #92
+ 2110 0734 180094E8 		ldmia	r4, {r3-r4}
+ 2111 0738 9C300BE5 		str	r3, [fp, #-156]
+ 2112 073c 98400BE5 		str	r4, [fp, #-152]
+ 193:../measures.c ****         res.sd_block_us      = sd_block_us;
+ 2113              		.loc 1 193 0
+ 2114 0740 6C404BE2 		sub	r4, fp, #108
+ 2115 0744 180094E8 		ldmia	r4, {r3-r4}
+ 2116 0748 94300BE5 		str	r3, [fp, #-148]
+ 2117 074c 90400BE5 		str	r4, [fp, #-144]
+ 194:../measures.c ****         res.us_per_call      = us_per_call;
+ 2118              		.loc 1 194 0
+ 2119 0750 74404BE2 		sub	r4, fp, #116
+ 2120 0754 180094E8 		ldmia	r4, {r3-r4}
+ 2121 0758 8C300BE5 		str	r3, [fp, #-140]
+ 2122 075c 88400BE5 		str	r4, [fp, #-136]
+ 195:../measures.c ****         res.cycles_per_call  = cycles_per_call;
+ 2123              		.loc 1 195 0
+ 2124 0760 7C404BE2 		sub	r4, fp, #124
+ 2125 0764 180094E8 		ldmia	r4, {r3-r4}
+ 2126 0768 84300BE5 		str	r3, [fp, #-132]
+ 2127 076c 80400BE5 		str	r4, [fp, #-128]
+ 196:../measures.c **** 
+ 197:../measures.c ****         registrar_medida(&res);
+ 2128              		.loc 1 197 0
+ 2129 0770 CC304BE2 		sub	r3, fp, #204
+ 2130 0774 0300A0E1 		mov	r0, r3
+ 2131 0778 CAFEFFEB 		bl	registrar_medida
+ 2132              	.LBE4:
+ 198:../measures.c ****     }
+ 199:../measures.c **** }
+ 2133              		.loc 1 199 0
+ 2134 077c 18D04BE2 		sub	sp, fp, #24
+ 2135 0780 70689DE8 		ldmfd	sp, {r4, r5, r6, fp, sp, lr}
+ 2136 0784 1EFF2FE1 		bx	lr
+ 2137              	.L40:
+ 2138              		.align	2
+ 2139              	.L39:
+ 2140 0788 24050000 		.word	g_overhead_us
+ 2141              		.cfi_endproc
+ 2142              	.LFE10:
+ 2144              		.align	2
+ 2146              	wrap_sa_recalc_all:
+ 2147              	.LFB11:
+ 200:../measures.c **** 
+ 201:../measures.c **** /* -------- Wrappers (usa sólo versiones C) -------- */
+ 202:../measures.c **** static void wrap_sa_recalc_all(void) {
+ 2148              		.loc 1 202 0
+ 2149              		.cfi_startproc
+ 2150              		@ Function supports interworking.
+ 2151              		@ args = 0, pretend = 0, frame = 0
+ 2152              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2153 078c 0DC0A0E1 		mov	ip, sp
+ 2154              	.LCFI16:
+ 2155              		.cfi_def_cfa_register 12
+ 2156 0790 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2157 0794 04B04CE2 		sub	fp, ip, #4
+ 2158              		.cfi_offset 14, -8
+ 2159              		.cfi_offset 13, -12
+ 2160              		.cfi_offset 11, -16
+ 2161              	.LCFI17:
+ 2162              		.cfi_def_cfa 11, 4
+ 203:../measures.c ****     sa_recalc_all_candidates();
+ 2163              		.loc 1 203 0
+ 2164 0798 FEFFFFEB 		bl	sa_recalc_all_candidates
+ 204:../measures.c **** }
+ 2165              		.loc 1 204 0
+ 2166 079c 0CD04BE2 		sub	sp, fp, #12
+ 2167 07a0 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2168 07a4 1EFF2FE1 		bx	lr
+ 2169              		.cfi_endproc
+ 2170              	.LFE11:
+ 2172              		.align	2
+ 2174              	wrap_sa_set_value:
+ 2175              	.LFB12:
+ 205:../measures.c **** 
+ 206:../measures.c **** static void wrap_sa_set_value(void) {
+ 2176              		.loc 1 206 0
+ 2177              		.cfi_startproc
+ 2178              		@ Function supports interworking.
+ 2179              		@ args = 0, pretend = 0, frame = 0
+ 2180              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2181 07a8 0DC0A0E1 		mov	ip, sp
+ 2182              	.LCFI18:
+ 2183              		.cfi_def_cfa_register 12
+ 2184 07ac 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2185 07b0 04B04CE2 		sub	fp, ip, #4
+ 2186              		.cfi_offset 14, -8
+ 2187              		.cfi_offset 13, -12
+ 2188              		.cfi_offset 11, -16
+ 2189              	.LCFI19:
+ 2190              		.cfi_def_cfa 11, 4
+ 207:../measures.c ****     sa_set_value(1, 1, 5);
+ 2191              		.loc 1 207 0
+ 2192 07b4 0100A0E3 		mov	r0, #1
+ 2193 07b8 0110A0E3 		mov	r1, #1
+ 2194 07bc 0520A0E3 		mov	r2, #5
+ 2195 07c0 FEFFFFEB 		bl	sa_set_value
+ 208:../measures.c ****     sa_set_value(1, 1, 0);
+ 2196              		.loc 1 208 0
+ 2197 07c4 0100A0E3 		mov	r0, #1
+ 2198 07c8 0110A0E3 		mov	r1, #1
+ 2199 07cc 0020A0E3 		mov	r2, #0
+ 2200 07d0 FEFFFFEB 		bl	sa_set_value
+ 209:../measures.c **** }
+ 2201              		.loc 1 209 0
+ 2202 07d4 0CD04BE2 		sub	sp, fp, #12
+ 2203 07d8 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2204 07dc 1EFF2FE1 		bx	lr
+ 2205              		.cfi_endproc
+ 2206              	.LFE12:
+ 2208              		.align	2
+ 2210              	wrap_sa_propagate_value:
+ 2211              	.LFB13:
+ 210:../measures.c **** 
+ 211:../measures.c **** static void wrap_sa_propagate_value(void) {
+ 2212              		.loc 1 211 0
+ 2213              		.cfi_startproc
+ 2214              		@ Function supports interworking.
+ 2215              		@ args = 0, pretend = 0, frame = 0
+ 2216              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2217 07e0 0DC0A0E1 		mov	ip, sp
+ 2218              	.LCFI20:
+ 2219              		.cfi_def_cfa_register 12
+ 2220 07e4 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2221 07e8 04B04CE2 		sub	fp, ip, #4
+ 2222              		.cfi_offset 14, -8
+ 2223              		.cfi_offset 13, -12
+ 2224              		.cfi_offset 11, -16
+ 2225              	.LCFI21:
+ 2226              		.cfi_def_cfa 11, 4
+ 212:../measures.c ****     sa_set_value(2, 2, 4);
+ 2227              		.loc 1 212 0
+ 2228 07ec 0200A0E3 		mov	r0, #2
+ 2229 07f0 0210A0E3 		mov	r1, #2
+ 2230 07f4 0420A0E3 		mov	r2, #4
+ 2231 07f8 FEFFFFEB 		bl	sa_set_value
+ 213:../measures.c ****     sa_propagate_value(2, 2, 4);
+ 2232              		.loc 1 213 0
+ 2233 07fc 0200A0E3 		mov	r0, #2
+ 2234 0800 0210A0E3 		mov	r1, #2
+ 2235 0804 0420A0E3 		mov	r2, #4
+ 2236 0808 FEFFFFEB 		bl	sa_propagate_value
+ 214:../measures.c ****     sa_set_value(2, 2, 0);
+ 2237              		.loc 1 214 0
+ 2238 080c 0200A0E3 		mov	r0, #2
+ 2239 0810 0210A0E3 		mov	r1, #2
+ 2240 0814 0020A0E3 		mov	r2, #0
+ 2241 0818 FEFFFFEB 		bl	sa_set_value
+ 215:../measures.c **** }
+ 2242              		.loc 1 215 0
+ 2243 081c 0CD04BE2 		sub	sp, fp, #12
+ 2244 0820 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2245 0824 1EFF2FE1 		bx	lr
+ 2246              		.cfi_endproc
+ 2247              	.LFE13:
+ 2249              		.align	2
+ 2251              	wrap_tick_idle:
+ 2252              	.LFB14:
+ 216:../measures.c **** 
+ 217:../measures.c **** static void wrap_tick_idle(void) {
+ 2253              		.loc 1 217 0
+ 2254              		.cfi_startproc
+ 2255              		@ Function supports interworking.
+ 2256              		@ args = 0, pretend = 0, frame = 0
+ 2257              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2258 0828 0DC0A0E1 		mov	ip, sp
+ 2259              	.LCFI22:
+ 2260              		.cfi_def_cfa_register 12
+ 2261 082c 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2262 0830 04B04CE2 		sub	fp, ip, #4
+ 2263              		.cfi_offset 14, -8
+ 2264              		.cfi_offset 13, -12
+ 2265              		.cfi_offset 11, -16
+ 2266              	.LCFI23:
+ 2267              		.cfi_def_cfa 11, 4
+ 218:../measures.c ****     sudoku_tick();
+ 2268              		.loc 1 218 0
+ 2269 0834 FEFFFFEB 		bl	sudoku_tick
+ 219:../measures.c **** }
+ 2270              		.loc 1 219 0
+ 2271 0838 0CD04BE2 		sub	sp, fp, #12
+ 2272 083c 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2273 0840 1EFF2FE1 		bx	lr
+ 2274              		.cfi_endproc
+ 2275              	.LFE14:
+ 2277              		.align	2
+ 2279              	wrap_tick_click:
+ 2280              	.LFB15:
+ 220:../measures.c **** 
+ 221:../measures.c **** /* Simuladores de eventos: implementa las funciones en button.c */
+ 222:../measures.c **** extern void simulate_click(void);
+ 223:../measures.c **** extern void simulate_increment(void);
+ 224:../measures.c **** 
+ 225:../measures.c **** static void wrap_tick_click(void) {
+ 2281              		.loc 1 225 0
+ 2282              		.cfi_startproc
+ 2283              		@ Function supports interworking.
+ 2284              		@ args = 0, pretend = 0, frame = 0
+ 2285              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2286 0844 0DC0A0E1 		mov	ip, sp
+ 2287              	.LCFI24:
+ 2288              		.cfi_def_cfa_register 12
+ 2289 0848 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2290 084c 04B04CE2 		sub	fp, ip, #4
+ 2291              		.cfi_offset 14, -8
+ 2292              		.cfi_offset 13, -12
+ 2293              		.cfi_offset 11, -16
+ 2294              	.LCFI25:
+ 2295              		.cfi_def_cfa 11, 4
+ 226:../measures.c ****     simulate_click();
+ 2296              		.loc 1 226 0
+ 2297 0850 FEFFFFEB 		bl	simulate_click
+ 227:../measures.c ****     sudoku_tick();
+ 2298              		.loc 1 227 0
+ 2299 0854 FEFFFFEB 		bl	sudoku_tick
+ 228:../measures.c **** }
+ 2300              		.loc 1 228 0
+ 2301 0858 0CD04BE2 		sub	sp, fp, #12
+ 2302 085c 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2303 0860 1EFF2FE1 		bx	lr
+ 2304              		.cfi_endproc
+ 2305              	.LFE15:
+ 2307              		.align	2
+ 2309              	wrap_tick_inc:
+ 2310              	.LFB16:
+ 229:../measures.c **** 
+ 230:../measures.c **** static void wrap_tick_inc(void) {
+ 2311              		.loc 1 230 0
+ 2312              		.cfi_startproc
+ 2313              		@ Function supports interworking.
+ 2314              		@ args = 0, pretend = 0, frame = 0
+ 2315              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2316 0864 0DC0A0E1 		mov	ip, sp
+ 2317              	.LCFI26:
+ 2318              		.cfi_def_cfa_register 12
+ 2319 0868 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2320 086c 04B04CE2 		sub	fp, ip, #4
+ 2321              		.cfi_offset 14, -8
+ 2322              		.cfi_offset 13, -12
+ 2323              		.cfi_offset 11, -16
+ 2324              	.LCFI27:
+ 2325              		.cfi_def_cfa 11, 4
+ 231:../measures.c ****     simulate_increment();
+ 2326              		.loc 1 231 0
+ 2327 0870 FEFFFFEB 		bl	simulate_increment
+ 232:../measures.c ****     sudoku_tick();
+ 2328              		.loc 1 232 0
+ 2329 0874 FEFFFFEB 		bl	sudoku_tick
+ 233:../measures.c **** }
+ 2330              		.loc 1 233 0
+ 2331 0878 0CD04BE2 		sub	sp, fp, #12
+ 2332 087c 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2333 0880 1EFF2FE1 		bx	lr
+ 2334              		.cfi_endproc
+ 2335              	.LFE16:
+ 2337              		.align	2
+ 2339              	wrap_button_gestion_idle:
+ 2340              	.LFB17:
+ 234:../measures.c **** 
+ 235:../measures.c **** static void wrap_button_gestion_idle(void) {
+ 2341              		.loc 1 235 0
+ 2342              		.cfi_startproc
+ 2343              		@ Function supports interworking.
+ 2344              		@ args = 0, pretend = 0, frame = 0
+ 2345              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2346 0884 0DC0A0E1 		mov	ip, sp
+ 2347              	.LCFI28:
+ 2348              		.cfi_def_cfa_register 12
+ 2349 0888 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2350 088c 04B04CE2 		sub	fp, ip, #4
+ 2351              		.cfi_offset 14, -8
+ 2352              		.cfi_offset 13, -12
+ 2353              		.cfi_offset 11, -16
+ 2354              	.LCFI29:
+ 2355              		.cfi_def_cfa 11, 4
+ 236:../measures.c ****     button_gestion_timer();
+ 2356              		.loc 1 236 0
+ 2357 0890 FEFFFFEB 		bl	button_gestion_timer
+ 237:../measures.c **** }
+ 2358              		.loc 1 237 0
+ 2359 0894 0CD04BE2 		sub	sp, fp, #12
+ 2360 0898 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2361 089c 1EFF2FE1 		bx	lr
+ 2362              		.cfi_endproc
+ 2363              	.LFE17:
+ 2365              		.section	.rodata
+ 2366              		.align	2
+ 2367              	.LC0:
+ 2368 0000 73615F72 		.ascii	"sa_recalc_all_candidates\000"
+ 2368      6563616C 
+ 2368      635F616C 
+ 2368      6C5F6361 
+ 2368      6E646964 
+ 2369 0019 000000   		.align	2
+ 2370              	.LC1:
+ 2371 001c 73615F73 		.ascii	"sa_set_value\000"
+ 2371      65745F76 
+ 2371      616C7565 
+ 2371      00
+ 2372 0029 000000   		.align	2
+ 2373              	.LC2:
+ 2374 002c 73615F70 		.ascii	"sa_propagate_value\000"
+ 2374      726F7061 
+ 2374      67617465 
+ 2374      5F76616C 
+ 2374      756500
+ 2375 003f 00       		.align	2
+ 2376              	.LC3:
+ 2377 0040 7375646F 		.ascii	"sudoku_tick_idle\000"
+ 2377      6B755F74 
+ 2377      69636B5F 
+ 2377      69646C65 
+ 2377      00
+ 2378 0051 000000   		.align	2
+ 2379              	.LC4:
+ 2380 0054 7375646F 		.ascii	"sudoku_tick_click\000"
+ 2380      6B755F74 
+ 2380      69636B5F 
+ 2380      636C6963 
+ 2380      6B00
+ 2381 0066 0000     		.align	2
+ 2382              	.LC5:
+ 2383 0068 7375646F 		.ascii	"sudoku_tick_inc\000"
+ 2383      6B755F74 
+ 2383      69636B5F 
+ 2383      696E6300 
+ 2384              		.align	2
+ 2385              	.LC6:
+ 2386 0078 62757474 		.ascii	"button_gestion_timer_idle\000"
+ 2386      6F6E5F67 
+ 2386      65737469 
+ 2386      6F6E5F74 
+ 2386      696D6572 
+ 2387 0092 0000     		.align	2
+ 2388              	.LC7:
+ 2389 0094 45696E74 		.ascii	"Eint4567_ISR\000"
+ 2389      34353637 
+ 2389      5F495352 
+ 2389      00
+ 2390 00a1 000000   		.align	2
+ 2391              	.LC8:
+ 2392 00a4 74696D65 		.ascii	"timer3_ISR\000"
+ 2392      72335F49 
+ 2392      535200
+ 2393 00af 00       		.text
+ 2394              		.align	2
+ 2395              		.global	realizar_medidas
+ 2397              	realizar_medidas:
+ 2398              	.LFB18:
+ 238:../measures.c **** 
+ 239:../measures.c **** #ifdef TIMER3_EXPIRED_AVAILABLE
+ 240:../measures.c **** extern volatile uint8_t timer3_expired;
+ 241:../measures.c **** static void wrap_button_gestion_rebote(void) {
+ 242:../measures.c ****     timer3_expired = 1;
+ 243:../measures.c ****     button_gestion_timer();
+ 244:../measures.c **** }
+ 245:../measures.c **** #endif
+ 246:../measures.c **** 
+ 247:../measures.c **** /* -------- Función principal de medición -------- */
+ 248:../measures.c **** void realizar_medidas(void)
+ 249:../measures.c **** {
+ 2399              		.loc 1 249 0
+ 2400              		.cfi_startproc
+ 2401              		@ Function supports interworking.
+ 2402              		@ args = 0, pretend = 0, frame = 168
+ 2403              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2404 08a0 0DC0A0E1 		mov	ip, sp
+ 2405              	.LCFI30:
+ 2406              		.cfi_def_cfa_register 12
+ 2407 08a4 10D82DE9 		stmfd	sp!, {r4, fp, ip, lr, pc}
+ 2408 08a8 04B04CE2 		sub	fp, ip, #4
+ 2409              		.cfi_offset 14, -8
+ 2410              		.cfi_offset 13, -12
+ 2411              		.cfi_offset 11, -16
+ 2412              		.cfi_offset 4, -20
+ 2413              	.LCFI31:
+ 2414              		.cfi_def_cfa 11, 4
+ 2415 08ac ACD04DE2 		sub	sp, sp, #172
+ 250:../measures.c ****     timer2_init();
+ 2416              		.loc 1 250 0
+ 2417 08b0 FEFFFFEB 		bl	timer2_init
+ 251:../measures.c ****     timer2_start();
+ 2418              		.loc 1 251 0
+ 2419 08b4 FEFFFFEB 		bl	timer2_start
+ 252:../measures.c ****     sa_load_initial_board();
+ 2420              		.loc 1 252 0
+ 2421 08b8 FEFFFFEB 		bl	sa_load_initial_board
+ 253:../measures.c ****     sudoku_init();
+ 2422              		.loc 1 253 0
+ 2423 08bc FEFFFFEB 		bl	sudoku_init
+ 254:../measures.c ****     Eint4567_init();
+ 2424              		.loc 1 254 0
+ 2425 08c0 FEFFFFEB 		bl	Eint4567_init
+ 255:../measures.c ****     /* Si necesitas timer3 para el rebote real, timer3_init(); */
+ 256:../measures.c **** 
+ 257:../measures.c ****     g_overhead_us = medir_overhead();
+ 2426              		.loc 1 257 0
+ 2427 08c4 39FEFFEB 		bl	medir_overhead
+ 2428 08c8 0020A0E1 		mov	r2, r0
+ 2429 08cc 38339FE5 		ldr	r3, .L59
+ 2430 08d0 002083E5 		str	r2, [r3, #0]
+ 258:../measures.c **** 
+ 259:../measures.c ****     medir_bloque(wrap_sa_recalc_all,      REP_RECALC_ALL,      NMED_DEFAULT, "sa_recalc_all_candida
+ 2431              		.loc 1 259 0
+ 2432 08d4 34039FE5 		ldr	r0, .L59+4
+ 2433 08d8 0A10A0E3 		mov	r1, #10
+ 2434 08dc 2820A0E3 		mov	r2, #40
+ 2435 08e0 2C339FE5 		ldr	r3, .L59+8
+ 2436 08e4 92FEFFEB 		bl	medir_bloque
+ 260:../measures.c ****     medir_bloque(wrap_sa_set_value,       REP_SET_VALUE,       NMED_DEFAULT, "sa_set_value");
+ 2437              		.loc 1 260 0
+ 2438 08e8 28039FE5 		ldr	r0, .L59+12
+ 2439 08ec C810A0E3 		mov	r1, #200
+ 2440 08f0 2820A0E3 		mov	r2, #40
+ 2441 08f4 20339FE5 		ldr	r3, .L59+16
+ 2442 08f8 8DFEFFEB 		bl	medir_bloque
+ 261:../measures.c ****     medir_bloque(wrap_sa_propagate_value, REP_PROPAGATE_VALUE, NMED_DEFAULT, "sa_propagate_value");
+ 2443              		.loc 1 261 0
+ 2444 08fc 1C039FE5 		ldr	r0, .L59+20
+ 2445 0900 3210A0E3 		mov	r1, #50
+ 2446 0904 2820A0E3 		mov	r2, #40
+ 2447 0908 14339FE5 		ldr	r3, .L59+24
+ 2448 090c 88FEFFEB 		bl	medir_bloque
+ 262:../measures.c ****     medir_bloque(wrap_tick_idle,          REP_TICK_IDLE,       NMED_TICK_IDLE, "sudoku_tick_idle");
+ 2449              		.loc 1 262 0
+ 2450 0910 10039FE5 		ldr	r0, .L59+28
+ 2451 0914 FA1FA0E3 		mov	r1, #1000
+ 2452 0918 1E20A0E3 		mov	r2, #30
+ 2453 091c 08339FE5 		ldr	r3, .L59+32
+ 2454 0920 83FEFFEB 		bl	medir_bloque
+ 263:../measures.c ****     medir_bloque(wrap_tick_click,         REP_TICK_CLICK,      NMED_DEFAULT, "sudoku_tick_click");
+ 2455              		.loc 1 263 0
+ 2456 0924 04039FE5 		ldr	r0, .L59+36
+ 2457 0928 3210A0E3 		mov	r1, #50
+ 2458 092c 2820A0E3 		mov	r2, #40
+ 2459 0930 FC329FE5 		ldr	r3, .L59+40
+ 2460 0934 7EFEFFEB 		bl	medir_bloque
+ 264:../measures.c ****     medir_bloque(wrap_tick_inc,           REP_TICK_INC,        NMED_DEFAULT, "sudoku_tick_inc");
+ 2461              		.loc 1 264 0
+ 2462 0938 F8029FE5 		ldr	r0, .L59+44
+ 2463 093c 3210A0E3 		mov	r1, #50
+ 2464 0940 2820A0E3 		mov	r2, #40
+ 2465 0944 F0329FE5 		ldr	r3, .L59+48
+ 2466 0948 79FEFFEB 		bl	medir_bloque
+ 265:../measures.c ****     medir_bloque(wrap_button_gestion_idle, REP_BUTTON_GESTION_IDLE, NMED_TICK_IDLE, "button_gestion
+ 2467              		.loc 1 265 0
+ 2468 094c EC029FE5 		ldr	r0, .L59+52
+ 2469 0950 FA1FA0E3 		mov	r1, #1000
+ 2470 0954 1E20A0E3 		mov	r2, #30
+ 2471 0958 E4329FE5 		ldr	r3, .L59+56
+ 2472 095c 74FEFFEB 		bl	medir_bloque
+ 2473              	.LBB6:
+ 266:../measures.c **** #ifdef TIMER3_EXPIRED_AVAILABLE
+ 267:../measures.c ****     medir_bloque(wrap_button_gestion_rebote, REP_BUTTON_GESTION_REBOTE, NMED_DEFAULT, "button_gesti
+ 268:../measures.c **** #endif
+ 269:../measures.c **** 
+ 270:../measures.c ****     /* Registramos ISRs si se han usado los hooks */
+ 271:../measures.c ****     {
+ 272:../measures.c ****         medida_t isr_btn;
+ 273:../measures.c ****         int i;
+ 274:../measures.c ****         for (i = 0; i < 31 && "Eint4567_ISR"[i] != '\0'; ++i) isr_btn.name[i] = "Eint4567_ISR"[i];
+ 2474              		.loc 1 274 0
+ 2475 0960 0030A0E3 		mov	r3, #0
+ 2476 0964 18300BE5 		str	r3, [fp, #-24]
+ 2477 0968 0C0000EA 		b	.L49
+ 2478              	.L51:
+ 2479              		.loc 1 274 0 is_stmt 0 discriminator 1
+ 2480 096c D4229FE5 		ldr	r2, .L59+60
+ 2481 0970 18301BE5 		ldr	r3, [fp, #-24]
+ 2482 0974 033082E0 		add	r3, r2, r3
+ 2483 0978 0020D3E5 		ldrb	r2, [r3, #0]	@ zero_extendqisi2
+ 2484 097c 5730E0E3 		mvn	r3, #87
+ 2485 0980 18101BE5 		ldr	r1, [fp, #-24]
+ 2486 0984 14004BE2 		sub	r0, fp, #20
+ 2487 0988 011080E0 		add	r1, r0, r1
+ 2488 098c 033081E0 		add	r3, r1, r3
+ 2489 0990 0020C3E5 		strb	r2, [r3, #0]
+ 2490 0994 18301BE5 		ldr	r3, [fp, #-24]
+ 2491 0998 013083E2 		add	r3, r3, #1
+ 2492 099c 18300BE5 		str	r3, [fp, #-24]
+ 2493              	.L49:
+ 2494 09a0 18301BE5 		ldr	r3, [fp, #-24]
+ 2495 09a4 1E0053E3 		cmp	r3, #30
+ 2496 09a8 050000CA 		bgt	.L50
+ 2497              		.loc 1 274 0 discriminator 2
+ 2498 09ac 94229FE5 		ldr	r2, .L59+60
+ 2499 09b0 18301BE5 		ldr	r3, [fp, #-24]
+ 2500 09b4 033082E0 		add	r3, r2, r3
+ 2501 09b8 0030D3E5 		ldrb	r3, [r3, #0]	@ zero_extendqisi2
+ 2502 09bc 000053E3 		cmp	r3, #0
+ 2503 09c0 E9FFFF1A 		bne	.L51
+ 2504              	.L50:
+ 275:../measures.c ****         isr_btn.name[i] = '\0';
+ 2505              		.loc 1 275 0 is_stmt 1
+ 2506 09c4 5730E0E3 		mvn	r3, #87
+ 2507 09c8 18201BE5 		ldr	r2, [fp, #-24]
+ 2508 09cc 14104BE2 		sub	r1, fp, #20
+ 2509 09d0 022081E0 		add	r2, r1, r2
+ 2510 09d4 033082E0 		add	r3, r2, r3
+ 2511 09d8 0020A0E3 		mov	r2, #0
+ 2512 09dc 0020C3E5 		strb	r2, [r3, #0]
+ 276:../measures.c ****         isr_btn.rep = g_isr_button_count ? g_isr_button_count : 1;
+ 2513              		.loc 1 276 0
+ 2514 09e0 64329FE5 		ldr	r3, .L59+64
+ 2515 09e4 003093E5 		ldr	r3, [r3, #0]
+ 2516 09e8 000053E3 		cmp	r3, #0
+ 2517 09ec 0200000A 		beq	.L52
+ 2518              		.loc 1 276 0 is_stmt 0 discriminator 1
+ 2519 09f0 54329FE5 		ldr	r3, .L59+64
+ 2520 09f4 003093E5 		ldr	r3, [r3, #0]
+ 2521 09f8 000000EA 		b	.L53
+ 2522              	.L52:
+ 2523              		.loc 1 276 0 discriminator 2
+ 2524 09fc 0130A0E3 		mov	r3, #1
+ 2525              	.L53:
+ 2526              		.loc 1 276 0 discriminator 3
+ 2527 0a00 4C300BE5 		str	r3, [fp, #-76]
+ 277:../measures.c ****         isr_btn.nmed = 1;
+ 2528              		.loc 1 277 0 is_stmt 1 discriminator 3
+ 2529 0a04 0130A0E3 		mov	r3, #1
+ 2530 0a08 48300BE5 		str	r3, [fp, #-72]
+ 278:../measures.c ****         isr_btn.min_us = g_isr_button_avg_us;
+ 2531              		.loc 1 278 0 discriminator 3
+ 2532 0a0c 3C329FE5 		ldr	r3, .L59+68
+ 2533 0a10 003093E5 		ldr	r3, [r3, #0]
+ 2534 0a14 44300BE5 		str	r3, [fp, #-68]
+ 279:../measures.c ****         isr_btn.max_us = g_isr_button_avg_us;
+ 2535              		.loc 1 279 0 discriminator 3
+ 2536 0a18 30329FE5 		ldr	r3, .L59+68
+ 2537 0a1c 003093E5 		ldr	r3, [r3, #0]
+ 2538 0a20 40300BE5 		str	r3, [fp, #-64]
+ 280:../measures.c ****         isr_btn.mean_block_us = (double)g_isr_button_avg_us;
+ 2539              		.loc 1 280 0 discriminator 3
+ 2540 0a24 24329FE5 		ldr	r3, .L59+68
+ 2541 0a28 003093E5 		ldr	r3, [r3, #0]
+ 2542 0a2c 0300A0E1 		mov	r0, r3
+ 2543 0a30 FEFFFFEB 		bl	__aeabi_ui2d
+ 2544 0a34 0030A0E1 		mov	r3, r0
+ 2545 0a38 0140A0E1 		mov	r4, r1
+ 2546 0a3c 3C300BE5 		str	r3, [fp, #-60]
+ 2547 0a40 38400BE5 		str	r4, [fp, #-56]
+ 281:../measures.c ****         isr_btn.sd_block_us = 0.0;
+ 2548              		.loc 1 281 0 discriminator 3
+ 2549 0a44 0030A0E3 		mov	r3, #0
+ 2550 0a48 0040A0E3 		mov	r4, #0
+ 2551 0a4c 34300BE5 		str	r3, [fp, #-52]
+ 2552 0a50 30400BE5 		str	r4, [fp, #-48]
+ 282:../measures.c ****         isr_btn.us_per_call = (double)g_isr_button_avg_us;
+ 2553              		.loc 1 282 0 discriminator 3
+ 2554 0a54 F4319FE5 		ldr	r3, .L59+68
+ 2555 0a58 003093E5 		ldr	r3, [r3, #0]
+ 2556 0a5c 0300A0E1 		mov	r0, r3
+ 2557 0a60 FEFFFFEB 		bl	__aeabi_ui2d
+ 2558 0a64 0030A0E1 		mov	r3, r0
+ 2559 0a68 0140A0E1 		mov	r4, r1
+ 2560 0a6c 2C300BE5 		str	r3, [fp, #-44]
+ 2561 0a70 28400BE5 		str	r4, [fp, #-40]
+ 283:../measures.c ****         isr_btn.cycles_per_call = isr_btn.us_per_call * 64.0;
+ 2562              		.loc 1 283 0 discriminator 3
+ 2563 0a74 2C404BE2 		sub	r4, fp, #44
+ 2564 0a78 180094E8 		ldmia	r4, {r3-r4}
+ 2565 0a7c 0300A0E1 		mov	r0, r3
+ 2566 0a80 0410A0E1 		mov	r1, r4
+ 2567 0a84 0020A0E3 		mov	r2, #0
+ 2568 0a88 0131A0E3 		mov	r3, #1073741824
+ 2569 0a8c 053683E2 		add	r3, r3, #5242880
+ 2570 0a90 FEFFFFEB 		bl	__aeabi_dmul
+ 2571 0a94 0030A0E1 		mov	r3, r0
+ 2572 0a98 0140A0E1 		mov	r4, r1
+ 2573 0a9c 24300BE5 		str	r3, [fp, #-36]
+ 2574 0aa0 20400BE5 		str	r4, [fp, #-32]
+ 284:../measures.c ****         registrar_medida(&isr_btn);
+ 2575              		.loc 1 284 0 discriminator 3
+ 2576 0aa4 6C304BE2 		sub	r3, fp, #108
+ 2577 0aa8 0300A0E1 		mov	r0, r3
+ 2578 0aac FDFDFFEB 		bl	registrar_medida
+ 285:../measures.c **** 
+ 286:../measures.c ****         medida_t isr_t3;
+ 287:../measures.c ****         for (i = 0; i < 31 && "timer3_ISR"[i] != '\0'; ++i) isr_t3.name[i] = "timer3_ISR"[i];
+ 2579              		.loc 1 287 0 discriminator 3
+ 2580 0ab0 0030A0E3 		mov	r3, #0
+ 2581 0ab4 18300BE5 		str	r3, [fp, #-24]
+ 2582 0ab8 0C0000EA 		b	.L54
+ 2583              	.L56:
+ 2584              		.loc 1 287 0 is_stmt 0 discriminator 1
+ 2585 0abc 90219FE5 		ldr	r2, .L59+72
+ 2586 0ac0 18301BE5 		ldr	r3, [fp, #-24]
+ 2587 0ac4 033082E0 		add	r3, r2, r3
+ 2588 0ac8 0020D3E5 		ldrb	r2, [r3, #0]	@ zero_extendqisi2
+ 2589 0acc A730E0E3 		mvn	r3, #167
+ 2590 0ad0 18101BE5 		ldr	r1, [fp, #-24]
+ 2591 0ad4 14004BE2 		sub	r0, fp, #20
+ 2592 0ad8 011080E0 		add	r1, r0, r1
+ 2593 0adc 033081E0 		add	r3, r1, r3
+ 2594 0ae0 0020C3E5 		strb	r2, [r3, #0]
+ 2595 0ae4 18301BE5 		ldr	r3, [fp, #-24]
+ 2596 0ae8 013083E2 		add	r3, r3, #1
+ 2597 0aec 18300BE5 		str	r3, [fp, #-24]
+ 2598              	.L54:
+ 2599 0af0 18301BE5 		ldr	r3, [fp, #-24]
+ 2600 0af4 1E0053E3 		cmp	r3, #30
+ 2601 0af8 050000CA 		bgt	.L55
+ 2602              		.loc 1 287 0 discriminator 2
+ 2603 0afc 50219FE5 		ldr	r2, .L59+72
+ 2604 0b00 18301BE5 		ldr	r3, [fp, #-24]
+ 2605 0b04 033082E0 		add	r3, r2, r3
+ 2606 0b08 0030D3E5 		ldrb	r3, [r3, #0]	@ zero_extendqisi2
+ 2607 0b0c 000053E3 		cmp	r3, #0
+ 2608 0b10 E9FFFF1A 		bne	.L56
+ 2609              	.L55:
+ 288:../measures.c ****         isr_t3.name[i] = '\0';
+ 2610              		.loc 1 288 0 is_stmt 1
+ 2611 0b14 A730E0E3 		mvn	r3, #167
+ 2612 0b18 18201BE5 		ldr	r2, [fp, #-24]
+ 2613 0b1c 14104BE2 		sub	r1, fp, #20
+ 2614 0b20 022081E0 		add	r2, r1, r2
+ 2615 0b24 033082E0 		add	r3, r2, r3
+ 2616 0b28 0020A0E3 		mov	r2, #0
+ 2617 0b2c 0020C3E5 		strb	r2, [r3, #0]
+ 289:../measures.c ****         isr_t3.rep = g_isr_timer3_count ? g_isr_timer3_count : 1;
+ 2618              		.loc 1 289 0
+ 2619 0b30 20319FE5 		ldr	r3, .L59+76
+ 2620 0b34 003093E5 		ldr	r3, [r3, #0]
+ 2621 0b38 000053E3 		cmp	r3, #0
+ 2622 0b3c 0200000A 		beq	.L57
+ 2623              		.loc 1 289 0 is_stmt 0 discriminator 1
+ 2624 0b40 10319FE5 		ldr	r3, .L59+76
+ 2625 0b44 003093E5 		ldr	r3, [r3, #0]
+ 2626 0b48 000000EA 		b	.L58
+ 2627              	.L57:
+ 2628              		.loc 1 289 0 discriminator 2
+ 2629 0b4c 0130A0E3 		mov	r3, #1
+ 2630              	.L58:
+ 2631              		.loc 1 289 0 discriminator 3
+ 2632 0b50 9C300BE5 		str	r3, [fp, #-156]
+ 290:../measures.c ****         isr_t3.nmed = 1;
+ 2633              		.loc 1 290 0 is_stmt 1 discriminator 3
+ 2634 0b54 0130A0E3 		mov	r3, #1
+ 2635 0b58 98300BE5 		str	r3, [fp, #-152]
+ 291:../measures.c ****         isr_t3.min_us = g_isr_timer3_avg_us;
+ 2636              		.loc 1 291 0 discriminator 3
+ 2637 0b5c F8309FE5 		ldr	r3, .L59+80
+ 2638 0b60 003093E5 		ldr	r3, [r3, #0]
+ 2639 0b64 94300BE5 		str	r3, [fp, #-148]
+ 292:../measures.c ****         isr_t3.max_us = g_isr_timer3_avg_us;
+ 2640              		.loc 1 292 0 discriminator 3
+ 2641 0b68 EC309FE5 		ldr	r3, .L59+80
+ 2642 0b6c 003093E5 		ldr	r3, [r3, #0]
+ 2643 0b70 90300BE5 		str	r3, [fp, #-144]
+ 293:../measures.c ****         isr_t3.mean_block_us = (double)g_isr_timer3_avg_us;
+ 2644              		.loc 1 293 0 discriminator 3
+ 2645 0b74 E0309FE5 		ldr	r3, .L59+80
+ 2646 0b78 003093E5 		ldr	r3, [r3, #0]
+ 2647 0b7c 0300A0E1 		mov	r0, r3
+ 2648 0b80 FEFFFFEB 		bl	__aeabi_ui2d
+ 2649 0b84 0030A0E1 		mov	r3, r0
+ 2650 0b88 0140A0E1 		mov	r4, r1
+ 2651 0b8c 8C300BE5 		str	r3, [fp, #-140]
+ 2652 0b90 88400BE5 		str	r4, [fp, #-136]
+ 294:../measures.c ****         isr_t3.sd_block_us = 0.0;
+ 2653              		.loc 1 294 0 discriminator 3
+ 2654 0b94 0030A0E3 		mov	r3, #0
+ 2655 0b98 0040A0E3 		mov	r4, #0
+ 2656 0b9c 84300BE5 		str	r3, [fp, #-132]
+ 2657 0ba0 80400BE5 		str	r4, [fp, #-128]
+ 295:../measures.c ****         isr_t3.us_per_call = (double)g_isr_timer3_avg_us;
+ 2658              		.loc 1 295 0 discriminator 3
+ 2659 0ba4 B0309FE5 		ldr	r3, .L59+80
+ 2660 0ba8 003093E5 		ldr	r3, [r3, #0]
+ 2661 0bac 0300A0E1 		mov	r0, r3
+ 2662 0bb0 FEFFFFEB 		bl	__aeabi_ui2d
+ 2663 0bb4 0030A0E1 		mov	r3, r0
+ 2664 0bb8 0140A0E1 		mov	r4, r1
+ 2665 0bbc 7C300BE5 		str	r3, [fp, #-124]
+ 2666 0bc0 78400BE5 		str	r4, [fp, #-120]
+ 296:../measures.c ****         isr_t3.cycles_per_call = isr_t3.us_per_call * 64.0;
+ 2667              		.loc 1 296 0 discriminator 3
+ 2668 0bc4 7C404BE2 		sub	r4, fp, #124
+ 2669 0bc8 180094E8 		ldmia	r4, {r3-r4}
+ 2670 0bcc 0300A0E1 		mov	r0, r3
+ 2671 0bd0 0410A0E1 		mov	r1, r4
+ 2672 0bd4 0020A0E3 		mov	r2, #0
+ 2673 0bd8 0131A0E3 		mov	r3, #1073741824
+ 2674 0bdc 053683E2 		add	r3, r3, #5242880
+ 2675 0be0 FEFFFFEB 		bl	__aeabi_dmul
+ 2676 0be4 0030A0E1 		mov	r3, r0
+ 2677 0be8 0140A0E1 		mov	r4, r1
+ 2678 0bec 74300BE5 		str	r3, [fp, #-116]
+ 2679 0bf0 70400BE5 		str	r4, [fp, #-112]
+ 297:../measures.c ****         registrar_medida(&isr_t3);
+ 2680              		.loc 1 297 0 discriminator 3
+ 2681 0bf4 BC304BE2 		sub	r3, fp, #188
+ 2682 0bf8 0300A0E1 		mov	r0, r3
+ 2683 0bfc A9FDFFEB 		bl	registrar_medida
+ 2684              	.LBE6:
+ 298:../measures.c ****     }
+ 299:../measures.c **** }
+ 2685              		.loc 1 299 0 discriminator 3
+ 2686 0c00 10D04BE2 		sub	sp, fp, #16
+ 2687 0c04 10689DE8 		ldmfd	sp, {r4, fp, sp, lr}
+ 2688 0c08 1EFF2FE1 		bx	lr
+ 2689              	.L60:
+ 2690              		.align	2
+ 2691              	.L59:
+ 2692 0c0c 24050000 		.word	g_overhead_us
+ 2693 0c10 00000000 		.word	wrap_sa_recalc_all
+ 2694 0c14 00000000 		.word	.LC0
+ 2695 0c18 00000000 		.word	wrap_sa_set_value
+ 2696 0c1c 1C000000 		.word	.LC1
+ 2697 0c20 00000000 		.word	wrap_sa_propagate_value
+ 2698 0c24 2C000000 		.word	.LC2
+ 2699 0c28 00000000 		.word	wrap_tick_idle
+ 2700 0c2c 40000000 		.word	.LC3
+ 2701 0c30 00000000 		.word	wrap_tick_click
+ 2702 0c34 54000000 		.word	.LC4
+ 2703 0c38 00000000 		.word	wrap_tick_inc
+ 2704 0c3c 68000000 		.word	.LC5
+ 2705 0c40 00000000 		.word	wrap_button_gestion_idle
+ 2706 0c44 78000000 		.word	.LC6
+ 2707 0c48 94000000 		.word	.LC7
+ 2708 0c4c 00000000 		.word	g_isr_button_count
+ 2709 0c50 00000000 		.word	g_isr_button_avg_us
+ 2710 0c54 A4000000 		.word	.LC8
+ 2711 0c58 00000000 		.word	g_isr_timer3_count
+ 2712 0c5c 00000000 		.word	g_isr_timer3_avg_us
+ 2713              		.cfi_endproc
+ 2714              	.LFE18:
+ 2716              		.align	2
+ 2717              		.global	medidas_count
+ 2719              	medidas_count:
+ 2720              	.LFB19:
+ 300:../measures.c **** 
+ 301:../measures.c **** /* -------- Accesores para depurador -------- */
+ 302:../measures.c **** unsigned medidas_count(void) {
+ 2721              		.loc 1 302 0
+ 2722              		.cfi_startproc
+ 2723              		@ Function supports interworking.
+ 2724              		@ args = 0, pretend = 0, frame = 0
+ 2725              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2726 0c60 0DC0A0E1 		mov	ip, sp
+ 2727              	.LCFI32:
+ 2728              		.cfi_def_cfa_register 12
+ 2729 0c64 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2730 0c68 04B04CE2 		sub	fp, ip, #4
+ 2731              		.cfi_offset 14, -8
+ 2732              		.cfi_offset 13, -12
+ 2733              		.cfi_offset 11, -16
+ 2734              	.LCFI33:
+ 2735              		.cfi_def_cfa 11, 4
+ 303:../measures.c ****     return g_medidas_count;
+ 2736              		.loc 1 303 0
+ 2737 0c6c 10309FE5 		ldr	r3, .L62
+ 2738 0c70 003093E5 		ldr	r3, [r3, #0]
+ 304:../measures.c **** }
+ 2739              		.loc 1 304 0
+ 2740 0c74 0300A0E1 		mov	r0, r3
+ 2741 0c78 0CD04BE2 		sub	sp, fp, #12
+ 2742 0c7c 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2743 0c80 1EFF2FE1 		bx	lr
+ 2744              	.L63:
+ 2745              		.align	2
+ 2746              	.L62:
+ 2747 0c84 00050000 		.word	g_medidas_count
+ 2748              		.cfi_endproc
+ 2749              	.LFE19:
+ 2751              		.align	2
+ 2752              		.global	medida_get
+ 2754              	medida_get:
+ 2755              	.LFB20:
+ 305:../measures.c **** const medida_t *medida_get(unsigned idx) {
+ 2756              		.loc 1 305 0
+ 2757              		.cfi_startproc
+ 2758              		@ Function supports interworking.
+ 2759              		@ args = 0, pretend = 0, frame = 8
+ 2760              		@ frame_needed = 1, uses_anonymous_args = 0
+ 2761 0c88 0DC0A0E1 		mov	ip, sp
+ 2762              	.LCFI34:
+ 2763              		.cfi_def_cfa_register 12
+ 2764 0c8c 00D82DE9 		stmfd	sp!, {fp, ip, lr, pc}
+ 2765 0c90 04B04CE2 		sub	fp, ip, #4
+ 2766              		.cfi_offset 14, -8
+ 2767              		.cfi_offset 13, -12
+ 2768              		.cfi_offset 11, -16
+ 2769              	.LCFI35:
+ 2770              		.cfi_def_cfa 11, 4
+ 2771 0c94 08D04DE2 		sub	sp, sp, #8
+ 2772 0c98 10000BE5 		str	r0, [fp, #-16]
+ 306:../measures.c ****     if (idx < g_medidas_count) return &g_medidas[idx];
+ 2773              		.loc 1 306 0
+ 2774 0c9c 44309FE5 		ldr	r3, .L67
+ 2775 0ca0 003093E5 		ldr	r3, [r3, #0]
+ 2776 0ca4 10201BE5 		ldr	r2, [fp, #-16]
+ 2777 0ca8 030052E1 		cmp	r2, r3
+ 2778 0cac 0800002A 		bcs	.L65
+ 2779              		.loc 1 306 0 is_stmt 0 discriminator 1
+ 2780 0cb0 10201BE5 		ldr	r2, [fp, #-16]
+ 2781 0cb4 0230A0E1 		mov	r3, r2
+ 2782 0cb8 0331A0E1 		mov	r3, r3, asl #2
+ 2783 0cbc 023083E0 		add	r3, r3, r2
+ 2784 0cc0 0332A0E1 		mov	r3, r3, asl #4
+ 2785 0cc4 0320A0E1 		mov	r2, r3
+ 2786 0cc8 1C309FE5 		ldr	r3, .L67+4
+ 2787 0ccc 033082E0 		add	r3, r2, r3
+ 2788 0cd0 000000EA 		b	.L66
+ 2789              	.L65:
+ 307:../measures.c ****     return (const medida_t*)0;
+ 2790              		.loc 1 307 0 is_stmt 1
+ 2791 0cd4 0030A0E3 		mov	r3, #0
+ 2792              	.L66:
+ 308:../measures.c **** }
+ 2793              		.loc 1 308 0
+ 2794 0cd8 0300A0E1 		mov	r0, r3
+ 2795 0cdc 0CD04BE2 		sub	sp, fp, #12
+ 2796 0ce0 00689DE8 		ldmfd	sp, {fp, sp, lr}
+ 2797 0ce4 1EFF2FE1 		bx	lr
+ 2798              	.L68:
+ 2799              		.align	2
+ 2800              	.L67:
+ 2801 0ce8 00050000 		.word	g_medidas_count
+ 2802 0cec 00000000 		.word	g_medidas
+ 2803              		.cfi_endproc
+ 2804              	.LFE20:
+ 2806              	.Letext0:
+DEFINED SYMBOLS
+                            *ABS*:00000000 measures.c
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1308   .bss:00000000 $d
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1309   .bss:00000000 g_medidas
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1312   .bss:00000500 g_medidas_count
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1318   .bss:00000504 g_isr_button_count
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1324   .bss:00000508 g_isr_button_accum_us
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1330   .bss:0000050c g_isr_button_last_t0
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1336   .bss:00000510 g_isr_button_avg_us
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1342   .bss:00000514 g_isr_timer3_count
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1348   .bss:00000518 g_isr_timer3_accum_us
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1354   .bss:0000051c g_isr_timer3_last_t0
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1360   .bss:00000520 g_isr_timer3_avg_us
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1363   .text:00000000 $a
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1366   .text:00000000 measure_isr_button_begin
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1395   .text:00000028 $d
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1400   .text:0000002c $a
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1403   .text:0000002c measure_isr_button_end
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1466   .text:000000c8 $d
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1473   .text:000000d8 $a
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1476   .text:000000d8 measure_isr_timer3_begin
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1505   .text:00000100 $d
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1509   .text:00000104 $a
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1512   .text:00000104 measure_isr_timer3_end
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1575   .text:000001a0 $d
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1584   .bss:00000524 g_overhead_us
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1587   .text:000001b0 $a
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1589   .text:000001b0 medir_overhead
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1658   .text:00000238 sqrt_entero
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1714   .text:000002a8 registrar_medida
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1769   .text:0000032c $d
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1781   .text:00000334 $a
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:1783   .text:00000334 medir_bloque
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2140   .text:00000788 $d
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2144   .text:0000078c $a
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2146   .text:0000078c wrap_sa_recalc_all
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2174   .text:000007a8 wrap_sa_set_value
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2210   .text:000007e0 wrap_sa_propagate_value
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2251   .text:00000828 wrap_tick_idle
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2279   .text:00000844 wrap_tick_click
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2309   .text:00000864 wrap_tick_inc
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2339   .text:00000884 wrap_button_gestion_idle
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2366   .rodata:00000000 $d
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2397   .text:000008a0 realizar_medidas
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2692   .text:00000c0c $d
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2716   .text:00000c60 $a
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2719   .text:00000c60 medidas_count
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2747   .text:00000c84 $d
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2751   .text:00000c88 $a
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2754   .text:00000c88 medida_get
+C:\Users\jorge\AppData\Local\Temp\ccMN5NKf.s:2801   .text:00000ce8 $d
+                     .debug_frame:00000010 $d
+
+UNDEFINED SYMBOLS
+timer2_count
+__aeabi_uidiv
+memcpy
+__aeabi_ui2d
+__aeabi_dadd
+__aeabi_dmul
+__aeabi_ddiv
+__aeabi_dsub
+__aeabi_dcmplt
+__aeabi_d2uiz
+sa_recalc_all_candidates
+sa_set_value
+sa_propagate_value
+sudoku_tick
+simulate_click
+simulate_increment
+button_gestion_timer
+timer2_init
+timer2_start
+sa_load_initial_board
+sudoku_init
+Eint4567_init

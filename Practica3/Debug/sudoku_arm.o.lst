@@ -1,0 +1,344 @@
+   1              	# 1 "../sudoku_arm.asm"
+   1              	    .syntax unified
+   0              	
+   0              	
+   0              	
+   2              	    .cpu arm7tdmi
+   3              	    .arm
+   4              	
+   5              	    /* =========================================================================
+   6              	     * Funciones ARM para Sudoku (Práctica 2)
+   7              	     * ========================================================================= */
+   8              	
+   9              	    .section .rodata
+  10              	    .p2align 2                @ Alinear a 4 bytes (2^2)
+  11              	init_region:
+  12 0000 00000003 	    .byte 0,0,0,3,3,3,6,6,6
+  12      03030606 
+  12      06
+  13 0009 000000   	    .balign 4                 @ Rellenar hasta múltiplo de 4 (evita inicio de código en dirección n
+  14              	
+  15              	    .section .text
+  16              	    .p2align 2
+  17              	
+  18              	    .extern candidatos_propagar_c   @ usada en candidatos_actualizar_arm_c
+  19              	
+  20              	/* ---------------------------------------------------------------------------
+  21              	 * void candidatos_propagar_arm(CELDA grid[9][9], uint8_t fila, uint8_t col)
+  22              	 * Elimina el candidato 'valor' (si valor!=0) en celdas VACÍAS (valor==0)
+  23              	 * de su fila, columna y región 3x3 excepto la propia celda origen.
+  24              	 * r0=grid base, r1=fila, r2=col
+  25              	 * ------------------------------------------------------------------------- */
+  26              	    .global candidatos_propagar_arm
+  28              	candidatos_propagar_arm:
+  29 0000 F04F2DE9 	    push    {r4-r11, lr}
+  30              	
+  31 0004 0040A0E1 	    mov     r4, r0          @ base grid
+  32 0008 0150A0E1 	    mov     r5, r1          @ fila
+  33 000c 0260A0E1 	    mov     r6, r2          @ col
+  34              	
+  35 0010 0970A0E3 	    mov     r7, #9
+  36 0014 950708E0 	    mul     r8, r5, r7
+  37 0018 068088E0 	    add     r8, r8, r6
+  38 001c 8880A0E1 	    lsl     r8, r8, #1
+  39 0020 088084E0 	    add     r8, r4, r8
+  40 0024 B090D8E1 	    ldrh    r9, [r8]        @ celda origen
+  41 0028 0F9009E2 	    and     r9, r9, #0x0F   @ valor (0..9)
+  42 002c 000059E3 	    cmp     r9, #0
+  43 0030 4400000A 	    beq     cp_ret          @ si valor=0 no propaga
+  44              	
+  45              	    @ mask = 1 << (6 + valor)  (BIT_CANDIDATOS=7 => pos = 7+val-1 = 6+val)
+  46 0034 01A0A0E3 	    mov     r10, #1
+  47 0038 06B089E2 	    add     r11, r9, #6
+  48 003c 1AABA0E1 	    lsl     r10, r10, r11
+  49              	
+  50              	    @ -------- Fila --------
+  51 0040 0070A0E3 	    mov     r7, #0
+  52              	cp_row_loop:
+  53 0044 090057E3 	    cmp     r7, #9
+  54 0048 0E00000A 	    beq     cp_row_end
+  55 004c 060057E1 	    cmp     r7, r6
+  56 0050 0A00000A 	    beq     cp_row_next
+  57 0054 09B0A0E3 	    mov     r11, #9
+  58 0058 950B08E0 	    mul     r8, r5, r11
+  59 005c 078088E0 	    add     r8, r8, r7
+  60 0060 8880A0E1 	    lsl     r8, r8, #1
+  61 0064 088084E0 	    add     r8, r4, r8
+  62 0068 B0B0D8E1 	    ldrh    r11, [r8]
+  63 006c 0F000BE2 	    and     r0, r11, #0x0F
+  64 0070 000050E3 	    cmp     r0, #0
+  65 0074 0100001A 	    bne     cp_row_next
+  66 0078 0AB08BE1 	    orr     r11, r11, r10
+  67 007c B0B0C8E1 	    strh    r11, [r8]
+  68              	cp_row_next:
+  69 0080 017087E2 	    add     r7, r7, #1
+  70 0084 EEFFFFEA 	    b       cp_row_loop
+  71              	cp_row_end:
+  72              	
+  73              	    @ -------- Columna --------
+  74 0088 0070A0E3 	    mov     r7, #0
+  75              	cp_col_loop:
+  76 008c 090057E3 	    cmp     r7, #9
+  77 0090 0E00000A 	    beq     cp_col_end
+  78 0094 050057E1 	    cmp     r7, r5
+  79 0098 0A00000A 	    beq     cp_col_next
+  80 009c 09B0A0E3 	    mov     r11, #9
+  81 00a0 970B08E0 	    mul     r8, r7, r11
+  82 00a4 068088E0 	    add     r8, r8, r6
+  83 00a8 8880A0E1 	    lsl     r8, r8, #1
+  84 00ac 088084E0 	    add     r8, r4, r8
+  85 00b0 B0B0D8E1 	    ldrh    r11, [r8]
+  86 00b4 0F000BE2 	    and     r0, r11, #0x0F
+  87 00b8 000050E3 	    cmp     r0, #0
+  88 00bc 0100001A 	    bne     cp_col_next
+  89 00c0 0AB08BE1 	    orr     r11, r11, r10
+  90 00c4 B0B0C8E1 	    strh    r11, [r8]
+  91              	cp_col_next:
+  92 00c8 017087E2 	    add     r7, r7, #1
+  93 00cc EEFFFFEA 	    b       cp_col_loop
+  94              	cp_col_end:
+  95              	
+  96              	    @ -------- Región 3x3 --------
+  97 00d0 2C029FE5 	    ldr     r0, =init_region
+  98 00d4 0510D0E7 	    ldrb    r1, [r0, r5]    @ init_i
+  99 00d8 0620D0E7 	    ldrb    r2, [r0, r6]    @ init_j
+ 100 00dc 033081E2 	    add     r3, r1, #3      @ end_i
+ 101 00e0 030082E2 	    add     r0, r2, #3      @ end_j
+ 102 00e4 0170A0E1 	    mov     r7, r1          @ i
+ 103              	cp_reg_i:
+ 104 00e8 030057E1 	    cmp     r7, r3
+ 105 00ec 1500000A 	    beq     cp_ret
+ 106 00f0 0280A0E1 	    mov     r8, r2          @ j
+ 107              	cp_reg_j:
+ 108 00f4 000058E1 	    cmp     r8, r0
+ 109 00f8 1000000A 	    beq     cp_reg_next_i
+ 110 00fc 050057E1 	    cmp     r7, r5
+ 111 0100 0100001A 	    bne     cp_reg_do
+ 112 0104 060058E1 	    cmp     r8, r6
+ 113 0108 0A00000A 	    beq     cp_reg_skip
+ 114              	cp_reg_do:
+ 115 010c 09B0A0E3 	    mov     r11, #9
+ 116 0110 970B01E0 	    mul     r1, r7, r11
+ 117 0114 081081E0 	    add     r1, r1, r8
+ 118 0118 8110A0E1 	    lsl     r1, r1, #1
+ 119 011c 011084E0 	    add     r1, r4, r1
+ 120 0120 B020D1E1 	    ldrh    r2, [r1]
+ 121 0124 0F3002E2 	    and     r3, r2, #0x0F
+ 122 0128 000053E3 	    cmp     r3, #0
+ 123 012c 0100001A 	    bne     cp_reg_skip
+ 124 0130 0A2082E1 	    orr     r2, r2, r10
+ 125 0134 B020C1E1 	    strh    r2, [r1]
+ 126              	cp_reg_skip:
+ 127 0138 018088E2 	    add     r8, r8, #1
+ 128 013c ECFFFFEA 	    b       cp_reg_j
+ 129              	cp_reg_next_i:
+ 130 0140 017087E2 	    add     r7, r7, #1
+ 131 0144 E7FFFFEA 	    b       cp_reg_i
+ 132              	
+ 133              	cp_ret:
+ 134 0148 F08FBDE8 	    pop     {r4-r11, pc}
+ 135              	
+ 136              	    .p2align 2
+ 137              	
+ 138              	/* ---------------------------------------------------------------------------
+ 139              	 * int candidatos_actualizar_arm(CELDA grid[9][9])  (ARM–ARM)
+ 140              	 * Pasada1: val==0 AND 0x007F; val!=0 OR (0xFF<<7)
+ 141              	 * Pasada2: Propaga con ARM
+ 142              	 * Return: nº celdas vacías
+ 143              	 * ------------------------------------------------------------------------- */
+ 144              	    .global candidatos_actualizar_arm
+ 146              	candidatos_actualizar_arm:
+ 147 014c F04F2DE9 	    push    {r4-r11, lr}
+ 148 0150 0040A0E1 	    mov     r4, r0
+ 149 0154 0050A0E3 	    mov     r5, #0
+ 150 0158 0060A0E3 	    mov     r6, #0
+ 151 015c 0070A0E3 	    mov     r7, #0          @ vacías
+ 152 0160 FFB0A0E3 	    mov     r11,#0xFF
+ 153              	
+ 154              	ua1_f:
+ 155 0164 090055E3 	    cmp     r5, #9
+ 156 0168 1500000A 	    beq     ua1_end
+ 157 016c 0060A0E3 	    mov     r6, #0
+ 158              	ua1_c:
+ 159 0170 090056E3 	    cmp     r6, #9
+ 160 0174 1000000A 	    beq     ua1_next_f
+ 161 0178 0900A0E3 	    mov     r0, #9
+ 162 017c 950008E0 	    mul     r8, r5, r0
+ 163 0180 068088E0 	    add     r8, r8, r6
+ 164 0184 8880A0E1 	    lsl     r8, r8, #1
+ 165 0188 088084E0 	    add     r8, r4, r8
+ 166 018c B000D8E1 	    ldrh    r0, [r8]
+ 167 0190 0F1000E2 	    and     r1, r0, #0x0F
+ 168 0194 000051E3 	    cmp     r1, #0
+ 169 0198 0200000A 	    beq     ua1_empty
+ 170 019c 8B0380E1 	    orr     r0, r0, r11, lsl #7
+ 171 01a0 B000C8E1 	    strh    r0, [r8]
+ 172 01a4 020000EA 	    b       ua1_c_next
+ 173              	ua1_empty:
+ 174 01a8 7F0000E2 	    and     r0, r0, #0x007F
+ 175 01ac B000C8E1 	    strh    r0, [r8]
+ 176 01b0 017087E2 	    add     r7, r7, #1
+ 177              	ua1_c_next:
+ 178 01b4 016086E2 	    add     r6, r6, #1
+ 179 01b8 ECFFFFEA 	    b       ua1_c
+ 180              	ua1_next_f:
+ 181 01bc 015085E2 	    add     r5, r5, #1
+ 182 01c0 E7FFFFEA 	    b       ua1_f
+ 183              	ua1_end:
+ 184              	
+ 185 01c4 0050A0E3 	    mov     r5, #0
+ 186              	ua2_f:
+ 187 01c8 090055E3 	    cmp     r5, #9
+ 188 01cc 1300000A 	    beq     ua_done
+ 189 01d0 0060A0E3 	    mov     r6, #0
+ 190              	ua2_c:
+ 191 01d4 090056E3 	    cmp     r6, #9
+ 192 01d8 0E00000A 	    beq     ua2_next_f
+ 193 01dc 0900A0E3 	    mov     r0, #9
+ 194 01e0 950008E0 	    mul     r8, r5, r0
+ 195 01e4 068088E0 	    add     r8, r8, r6
+ 196 01e8 8880A0E1 	    lsl     r8, r8, #1
+ 197 01ec 088084E0 	    add     r8, r4, r8
+ 198 01f0 B000D8E1 	    ldrh    r0, [r8]
+ 199 01f4 0F1000E2 	    and     r1, r0, #0x0F
+ 200 01f8 000051E3 	    cmp     r1, #0
+ 201 01fc 0300000A 	    beq     ua2_c_next
+ 202 0200 0400A0E1 	    mov     r0, r4
+ 203 0204 0510A0E1 	    mov     r1, r5
+ 204 0208 0620A0E1 	    mov     r2, r6
+ 205 020c FEFFFFEB 	    bl      candidatos_propagar_arm
+ 206              	ua2_c_next:
+ 207 0210 016086E2 	    add     r6, r6, #1
+ 208 0214 EEFFFFEA 	    b       ua2_c
+ 209              	ua2_next_f:
+ 210 0218 015085E2 	    add     r5, r5, #1
+ 211 021c E9FFFFEA 	    b       ua2_f
+ 212              	
+ 213              	ua_done:
+ 214 0220 0700A0E1 	    mov     r0, r7
+ 215 0224 F08FBDE8 	    pop     {r4-r11, pc}
+ 216              	
+ 217              	    .p2align 2
+ 218              	
+ 219              	/* ---------------------------------------------------------------------------
+ 220              	 * int candidatos_actualizar_arm_c(CELDA grid[9][9])  (ARM–C)
+ 221              	 * Pasada1 igual; Pasada2 llama a candidatos_propagar_c (versión C).
+ 222              	 * ------------------------------------------------------------------------- */
+ 223              	    .global candidatos_actualizar_arm_c
+ 225              	candidatos_actualizar_arm_c:
+ 226 0228 F04F2DE9 	    push    {r4-r11, lr}
+ 227 022c 0040A0E1 	    mov     r4, r0
+ 228 0230 0050A0E3 	    mov     r5, #0
+ 229 0234 0060A0E3 	    mov     r6, #0
+ 230 0238 0070A0E3 	    mov     r7, #0
+ 231 023c FFB0A0E3 	    mov     r11,#0xFF
+ 232              	
+ 233              	ac1_f:
+ 234 0240 090055E3 	    cmp     r5, #9
+ 235 0244 1500000A 	    beq     ac1_end
+ 236 0248 0060A0E3 	    mov     r6, #0
+ 237              	ac1_c:
+ 238 024c 090056E3 	    cmp     r6, #9
+ 239 0250 1000000A 	    beq     ac1_next_f
+ 240 0254 0900A0E3 	    mov     r0, #9
+ 241 0258 950008E0 	    mul     r8, r5, r0
+ 242 025c 068088E0 	    add     r8, r8, r6
+ 243 0260 8880A0E1 	    lsl     r8, r8, #1
+ 244 0264 088084E0 	    add     r8, r4, r8
+ 245 0268 B000D8E1 	    ldrh    r0, [r8]
+ 246 026c 0F1000E2 	    and     r1, r0, #0x0F
+ 247 0270 000051E3 	    cmp     r1, #0
+ 248 0274 0200000A 	    beq     ac1_empty
+ 249 0278 8B0380E1 	    orr     r0, r0, r11, lsl #7
+ 250 027c B000C8E1 	    strh    r0, [r8]
+ 251 0280 020000EA 	    b       ac1_c_next
+ 252              	ac1_empty:
+ 253 0284 7F0000E2 	    and     r0, r0, #0x007F
+ 254 0288 B000C8E1 	    strh    r0, [r8]
+ 255 028c 017087E2 	    add     r7, r7, #1
+ 256              	ac1_c_next:
+ 257 0290 016086E2 	    add     r6, r6, #1
+ 258 0294 ECFFFFEA 	    b       ac1_c
+ 259              	ac1_next_f:
+ 260 0298 015085E2 	    add     r5, r5, #1
+ 261 029c E7FFFFEA 	    b       ac1_f
+ 262              	ac1_end:
+ 263              	
+ 264 02a0 0050A0E3 	    mov     r5, #0
+ 265              	ac2_f:
+ 266 02a4 090055E3 	    cmp     r5, #9
+ 267 02a8 1300000A 	    beq     ac_done
+ 268 02ac 0060A0E3 	    mov     r6, #0
+ 269              	ac2_c:
+ 270 02b0 090056E3 	    cmp     r6, #9
+ 271 02b4 0E00000A 	    beq     ac2_next_f
+ 272 02b8 0900A0E3 	    mov     r0, #9
+ 273 02bc 950008E0 	    mul     r8, r5, r0
+ 274 02c0 068088E0 	    add     r8, r8, r6
+ 275 02c4 8880A0E1 	    lsl     r8, r8, #1
+ 276 02c8 088084E0 	    add     r8, r4, r8
+ 277 02cc B000D8E1 	    ldrh    r0, [r8]
+ 278 02d0 0F1000E2 	    and     r1, r0, #0x0F
+ 279 02d4 000051E3 	    cmp     r1, #0
+ 280 02d8 0300000A 	    beq     ac2_c_next
+ 281 02dc 0400A0E1 	    mov     r0, r4
+ 282 02e0 0510A0E1 	    mov     r1, r5
+ 283 02e4 0620A0E1 	    mov     r2, r6
+ 284 02e8 FEFFFFEB 	    bl      candidatos_propagar_c
+ 285              	ac2_c_next:
+ 286 02ec 016086E2 	    add     r6, r6, #1
+ 287 02f0 EEFFFFEA 	    b       ac2_c
+ 288              	ac2_next_f:
+ 289 02f4 015085E2 	    add     r5, r5, #1
+ 290 02f8 E9FFFFEA 	    b       ac2_f
+ 291              	
+ 292              	ac_done:
+ 293 02fc 0700A0E1 	    mov     r0, r7
+ 294 0300 F08FBDE8 	    pop     {r4-r11, pc}
+ 294      00000000 
+DEFINED SYMBOLS
+   ../sudoku_arm.asm:10     .rodata:00000000 $d
+   ../sudoku_arm.asm:11     .rodata:00000000 init_region
+   ../sudoku_arm.asm:16     .text:00000000 $a
+   ../sudoku_arm.asm:28     .text:00000000 candidatos_propagar_arm
+   ../sudoku_arm.asm:133    .text:00000148 cp_ret
+   ../sudoku_arm.asm:52     .text:00000044 cp_row_loop
+   ../sudoku_arm.asm:71     .text:00000088 cp_row_end
+   ../sudoku_arm.asm:68     .text:00000080 cp_row_next
+   ../sudoku_arm.asm:75     .text:0000008c cp_col_loop
+   ../sudoku_arm.asm:94     .text:000000d0 cp_col_end
+   ../sudoku_arm.asm:91     .text:000000c8 cp_col_next
+   ../sudoku_arm.asm:103    .text:000000e8 cp_reg_i
+   ../sudoku_arm.asm:107    .text:000000f4 cp_reg_j
+   ../sudoku_arm.asm:129    .text:00000140 cp_reg_next_i
+   ../sudoku_arm.asm:114    .text:0000010c cp_reg_do
+   ../sudoku_arm.asm:126    .text:00000138 cp_reg_skip
+   ../sudoku_arm.asm:146    .text:0000014c candidatos_actualizar_arm
+   ../sudoku_arm.asm:154    .text:00000164 ua1_f
+   ../sudoku_arm.asm:183    .text:000001c4 ua1_end
+   ../sudoku_arm.asm:158    .text:00000170 ua1_c
+   ../sudoku_arm.asm:180    .text:000001bc ua1_next_f
+   ../sudoku_arm.asm:173    .text:000001a8 ua1_empty
+   ../sudoku_arm.asm:177    .text:000001b4 ua1_c_next
+   ../sudoku_arm.asm:186    .text:000001c8 ua2_f
+   ../sudoku_arm.asm:213    .text:00000220 ua_done
+   ../sudoku_arm.asm:190    .text:000001d4 ua2_c
+   ../sudoku_arm.asm:209    .text:00000218 ua2_next_f
+   ../sudoku_arm.asm:206    .text:00000210 ua2_c_next
+   ../sudoku_arm.asm:225    .text:00000228 candidatos_actualizar_arm_c
+   ../sudoku_arm.asm:233    .text:00000240 ac1_f
+   ../sudoku_arm.asm:262    .text:000002a0 ac1_end
+   ../sudoku_arm.asm:237    .text:0000024c ac1_c
+   ../sudoku_arm.asm:259    .text:00000298 ac1_next_f
+   ../sudoku_arm.asm:252    .text:00000284 ac1_empty
+   ../sudoku_arm.asm:256    .text:00000290 ac1_c_next
+   ../sudoku_arm.asm:265    .text:000002a4 ac2_f
+   ../sudoku_arm.asm:292    .text:000002fc ac_done
+   ../sudoku_arm.asm:269    .text:000002b0 ac2_c
+   ../sudoku_arm.asm:288    .text:000002f4 ac2_next_f
+   ../sudoku_arm.asm:285    .text:000002ec ac2_c_next
+   ../sudoku_arm.asm:294    .text:00000304 $d
+                   .debug_aranges:0000000c $d
+
+UNDEFINED SYMBOLS
+candidatos_propagar_c
